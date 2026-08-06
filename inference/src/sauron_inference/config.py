@@ -6,6 +6,8 @@ from typing import Literal
 import yaml
 from pydantic import BaseModel, Field, field_validator
 
+Point = tuple[float, float]
+
 
 class TrackerConfig(BaseModel):
     high_thresh: float = 0.5
@@ -40,6 +42,77 @@ class DefaultsConfig(BaseModel):
     capture: CaptureConfig = Field(default_factory=CaptureConfig)
 
 
+class LineConfig(BaseModel):
+    id: str
+    points: list[Point]
+    # Counting direction; crossings against it are tagged "reverse".
+    direction: Point | None = None
+    classes: list[str] | None = None
+
+    @field_validator("points")
+    @classmethod
+    def _two_points(cls, v: list[Point]) -> list[Point]:
+        if len(v) != 2:
+            raise ValueError("a crossing line needs exactly 2 points")
+        return v
+
+
+PolygonRuleName = Literal["stopped", "wrong_way", "congestion"]
+
+
+def _default_polygon_rules() -> list[PolygonRuleName]:
+    return ["stopped"]
+
+
+class PolygonConfig(BaseModel):
+    id: str
+    points: list[Point]
+    kind: Literal["lane", "parking", "counting"] = "lane"
+    # Which rules evaluate this polygon.
+    rules: list[PolygonRuleName] = Field(default_factory=_default_polygon_rules)
+    # Allowed traffic direction vector (required for wrong_way).
+    direction: Point | None = None
+
+    @field_validator("points")
+    @classmethod
+    def _at_least_three(cls, v: list[Point]) -> list[Point]:
+        if len(v) < 3:
+            raise ValueError("a polygon needs at least 3 points")
+        return v
+
+
+class HomographyConfig(BaseModel):
+    """Pixel -> ground plane (meters) calibration, >= 4 point pairs."""
+
+    src_points: list[Point]
+    dst_points: list[Point]
+
+    @field_validator("dst_points")
+    @classmethod
+    def _same_length(cls, v: list[Point], info) -> list[Point]:
+        src = info.data.get("src_points", [])
+        if len(v) != len(src) or len(v) < 4:
+            raise ValueError("homography needs >= 4 src/dst point pairs of equal length")
+        return v
+
+
+class ThresholdsConfig(BaseModel):
+    stopped_seconds: float = 15.0
+    stopped_speed_epsilon: float = 3.0  # px/s
+    wrong_way_cosine: float = -0.7
+    wrong_way_seconds: float = 3.0
+    congestion_occupancy: float = 0.6  # fraction of polygon area
+    congestion_seconds: float = 30.0
+    congestion_cooldown_s: float = 60.0
+
+
+class ROIConfig(BaseModel):
+    lines: list[LineConfig] = Field(default_factory=list)
+    polygons: list[PolygonConfig] = Field(default_factory=list)
+    homography: HomographyConfig | None = None
+    thresholds: ThresholdsConfig = Field(default_factory=ThresholdsConfig)
+
+
 class StreamConfig(BaseModel):
     id: str
     name: str = ""
@@ -51,6 +124,7 @@ class StreamConfig(BaseModel):
     confidence_threshold: float | None = None
     width: int = 1280
     height: int = 720
+    roi: ROIConfig | None = None
 
     def resolved_engine(self, defaults: DefaultsConfig) -> str:
         return self.engine_path or defaults.engine_path

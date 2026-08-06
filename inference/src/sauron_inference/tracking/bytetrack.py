@@ -88,9 +88,7 @@ class STrack:
     def velocity(self) -> tuple[float, float]:
         if self.mean is None:
             return (0.0, 0.0)
-        vx = float(self.mean[4] * self.tlwh[3] if self.tlwh[3] else self.mean[4])
-        vy = float(self.mean[5] * self.tlwh[3] if self.tlwh[3] else self.mean[5])
-        return (vx, vy)
+        return (float(self.mean[4]), float(self.mean[5]))
 
     def activate(self, kf: KalmanFilterXYAH, frame_id: int) -> None:
         self.mean, self.covariance = kf.initiate(tlwh_to_xyah(self.tlwh))

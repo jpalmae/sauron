@@ -36,6 +36,7 @@ class TrackedObject:
     track_history: list[tuple[float, float]]
     frame_seq: int
     timestamp: float
+    speed_kmh: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -50,4 +51,5 @@ class TrackedObject:
             "track_history": [list(p) for p in self.track_history],
             "frame_seq": self.frame_seq,
             "timestamp": self.timestamp,
+            "speed_kmh": round(self.speed_kmh, 1) if self.speed_kmh is not None else None,
         }

@@ -8,12 +8,15 @@ from collections.abc import Callable
 
 from ..capture.base import FrameSource
 from ..detection.base import Detector
+from ..rules.engine import RulesEngine
+from ..rules.events import Event
 from ..tracking.bytetrack import BYTETracker, STrack
 from ..types import Frame, TrackedObject
 
 log = logging.getLogger(__name__)
 
 TracksCallback = Callable[[str, Frame, list[TrackedObject]], None]
+EventCallback = Callable[[Event], None]
 
 
 def to_tracked_object(track: STrack, frame: Frame) -> TrackedObject:
@@ -47,12 +50,16 @@ class StreamPipeline:
         detector: Detector,
         tracker: BYTETracker,
         on_tracks: TracksCallback | None = None,
+        rules_engine: RulesEngine | None = None,
+        on_event: EventCallback | None = None,
         queue_size: int = 2,
     ) -> None:
         self.source = source
         self.detector = detector
         self.tracker = tracker
         self.on_tracks = on_tracks
+        self.rules_engine = rules_engine
+        self.on_event = on_event
         self._queue: queue.Queue[Frame] = queue.Queue(maxsize=max(queue_size, 1))
         self._stop = threading.Event()
         self._capture_thread = threading.Thread(
@@ -96,6 +103,14 @@ class StreamPipeline:
                 tracks = self.tracker.update(detections)
                 tracked = [to_tracked_object(t, frame) for t in tracks]
                 self.frames_processed += 1
+                if self.rules_engine is not None:
+                    events = self.rules_engine.process(frame, tracked)
+                    for event in events:
+                        log.info(
+                            "[%s] %s %s", frame.camera_id, event.priority, event.event_type
+                        )
+                        if self.on_event is not None:
+                            self.on_event(event)
                 if self.on_tracks is not None:
                     self.on_tracks(frame.camera_id, frame, tracked)
             except Exception:

@@ -9,8 +9,9 @@ from ..capture.synthetic import FileSource, SyntheticSource
 from ..config import PipelineConfig, StreamConfig
 from ..detection.base import Detector
 from ..detection.tensorrt_yolo import TensorRTYolo
+from ..rules.engine import RulesEngine
 from ..tracking.bytetrack import BYTETracker
-from .stream import NullCallback, StreamPipeline, TracksCallback
+from .stream import EventCallback, NullCallback, StreamPipeline, TracksCallback
 
 log = logging.getLogger(__name__)
 
@@ -51,11 +52,13 @@ class PipelineManager:
         self,
         cfg: PipelineConfig,
         on_tracks: TracksCallback | None = None,
+        on_event: EventCallback | None = None,
         detector_factory=build_detector,
         source_factory=build_source,
     ) -> None:
         self.cfg = cfg
         self.on_tracks = on_tracks or NullCallback()
+        self.on_event = on_event
         self._detector_factory = detector_factory
         self._source_factory = source_factory
         self.pipelines: list[StreamPipeline] = []
@@ -66,12 +69,19 @@ class PipelineManager:
             source = self._source_factory(stream, self.cfg)
             detector = self._detector_factory(stream, self.cfg, device_id)
             tracker = BYTETracker(self.cfg.defaults.tracker, frame_rate=stream.target_fps)
+            engine = (
+                RulesEngine(stream.id, stream.roi, fps=stream.target_fps)
+                if stream.roi
+                else None
+            )
             self.pipelines.append(
                 StreamPipeline(
                     source=source,
                     detector=detector,
                     tracker=tracker,
                     on_tracks=self.on_tracks,
+                    rules_engine=engine,
+                    on_event=self.on_event,
                     queue_size=self.cfg.defaults.capture.queue_size,
                 )
             )
