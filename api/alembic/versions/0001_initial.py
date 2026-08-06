@@ -42,7 +42,7 @@ def upgrade() -> None:
         sa.Column("priority", sa.String(20), server_default="info"),
         sa.Column("confidence", sa.Float, nullable=True),
         sa.Column("snapshot_key", sa.String(255), nullable=True),
-        sa.Column("clip_url", sa.String(255), nullable=True),
+        sa.Column("clip_key", sa.String(255), nullable=True),
         sa.Column("rule_id", sa.String(100), server_default=""),
         sa.Column("object_id", sa.Integer, nullable=True),
         sa.Column("metadata", JSON_TYPE, nullable=True),

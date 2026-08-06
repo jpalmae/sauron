@@ -33,6 +33,7 @@ class Event:
     object_id: int | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
     snapshot: np.ndarray | None = None
+    clip: bytes | None = None  # pre-event MP4 evidence
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -46,4 +47,5 @@ class Event:
             "object_id": self.object_id,
             "metadata": self.metadata,
             "has_snapshot": self.snapshot is not None,
+            "has_clip": self.clip is not None,
         }

@@ -45,6 +45,7 @@ class EventIngest(BaseModel):
     object_id: int | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
     snapshot_jpeg: str | None = None  # base64
+    clip_mp4: str | None = None  # base64
 
 
 class EventRead(BaseModel):
@@ -58,6 +59,7 @@ class EventRead(BaseModel):
     object_id: int | None
     metadata: dict[str, Any] | None
     snapshot_url: str | None = None
+    clip_url: str | None = None
 
     model_config = {"from_attributes": True}
 

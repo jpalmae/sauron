@@ -40,6 +40,11 @@ defaults:
     latency_ms: 200
     reconnect_backoff_s: 2.0
     queue_size: 2
+  # Pre-event MP4 evidence clips (ring buffer, ~10 MB/stream at 8 s)
+  clips:
+    enabled: true
+    preroll_seconds: 8
+    clip_fps: 12
 
 streams:
   - id: cam-01

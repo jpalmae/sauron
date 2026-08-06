@@ -41,6 +41,15 @@ async def ingest_event(
         if jpeg:
             snapshot_key = await storage.upload_snapshot(camera.id, ts, jpeg)
 
+    clip_key = None
+    if payload.clip_mp4:
+        try:
+            mp4 = base64.b64decode(payload.clip_mp4)
+        except ValueError:
+            mp4 = b""
+        if mp4:
+            clip_key = await storage.upload_clip(camera.id, ts, mp4)
+
     row = AnalyticsEvent(
         timestamp=ts,
         camera_id=camera.id,
@@ -51,6 +60,7 @@ async def ingest_event(
         object_id=payload.object_id,
         extra=payload.metadata,
         snapshot_key=snapshot_key,
+        clip_key=clip_key,
     )
     session.add(row)
     await session.commit()

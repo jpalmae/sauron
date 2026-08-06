@@ -12,6 +12,7 @@ from ..rules.engine import RulesEngine
 from ..rules.events import Event
 from ..tracking.bytetrack import BYTETracker, STrack
 from ..types import Frame, TrackedObject
+from .clip import ClipBuffer
 
 log = logging.getLogger(__name__)
 
@@ -52,6 +53,7 @@ class StreamPipeline:
         on_tracks: TracksCallback | None = None,
         rules_engine: RulesEngine | None = None,
         on_event: EventCallback | None = None,
+        clip_buffer: ClipBuffer | None = None,
         queue_size: int = 2,
     ) -> None:
         self.source = source
@@ -60,6 +62,7 @@ class StreamPipeline:
         self.on_tracks = on_tracks
         self.rules_engine = rules_engine
         self.on_event = on_event
+        self.clip_buffer = clip_buffer
         self._queue: queue.Queue[Frame] = queue.Queue(maxsize=max(queue_size, 1))
         self._stop = threading.Event()
         self._capture_thread = threading.Thread(
@@ -103,8 +106,14 @@ class StreamPipeline:
                 tracks = self.tracker.update(detections)
                 tracked = [to_tracked_object(t, frame) for t in tracks]
                 self.frames_processed += 1
+                if self.clip_buffer is not None:
+                    self.clip_buffer.add(frame)
                 if self.rules_engine is not None:
                     events = self.rules_engine.process(frame, tracked)
+                    if events and self.clip_buffer is not None:
+                        clip = self.clip_buffer.render_mp4()
+                        for event in events:
+                            event.clip = clip
                     for event in events:
                         log.info(
                             "[%s] %s %s", frame.camera_id, event.priority, event.event_type

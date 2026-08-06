@@ -56,6 +56,33 @@ services:
       minio-init:
         condition: service_completed_successfully
 
+  web:
+    build:
+      context: .
+      dockerfile: deploy/docker/web.Dockerfile
+    image: sauron/web:0.1.0
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    volumes:
+      # white-label: drop client logos/favicon here, no rebuild needed
+      - ./brand:/usr/share/nginx/html/brand:ro
+    depends_on:
+      - api
+
+  # Optional RTSP -> WebRTC gateway for the live grid (WHEP players).
+  # Add each camera as a path in mediamtx.yml and enable with:
+  #   docker compose --profile streaming up -d mediamtx
+  mediamtx:
+    image: bluenviron/mediamtx:latest
+    profiles: ["streaming"]
+    restart: unless-stopped
+    volumes:
+      - ./deploy/mediamtx.yml:/mediamtx.yml:ro
+    ports:
+      - "8889:8889" # WebRTC/WHEP
+      - "8554:8554" # RTSP
+
   timescaledb:
     image: timescale/timescaledb-ha:pg16
     restart: unless-stopped

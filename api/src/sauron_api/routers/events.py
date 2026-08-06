@@ -71,6 +71,7 @@ async def list_events(
             object_id=row.object_id,
             metadata=row.extra,
             snapshot_url=await storage.presigned_url(row.snapshot_key),
+            clip_url=await storage.presigned_url(row.clip_key),
         )
         items.append(item)
     return EventPage(total=total, page=page, page_size=page_size, items=items)

@@ -52,6 +52,7 @@ async def run_consumer(app) -> None:
                         "object_id": row.object_id,
                         "metadata": row.extra,
                         "snapshot_key": row.snapshot_key,
+                        "clip_key": row.clip_key,
                     }
                 )
         except asyncio.CancelledError:

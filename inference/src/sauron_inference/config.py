@@ -34,6 +34,15 @@ class CaptureConfig(BaseModel):
     decoder: str = "nvv4l2decoder"
 
 
+class ClipConfig(BaseModel):
+    """Pre-event video clip evidence (MP4 ring buffer per stream)."""
+
+    enabled: bool = False
+    preroll_seconds: float = 8.0
+    jpeg_quality: int = 75
+    clip_fps: int = 12
+
+
 class OpenAIDetectorConfig(BaseModel):
     """Remote inference via an OpenAI-compatible vision endpoint (chat.completions).
 
@@ -64,6 +73,7 @@ class DefaultsConfig(BaseModel):
     )
     tracker: TrackerConfig = Field(default_factory=TrackerConfig)
     capture: CaptureConfig = Field(default_factory=CaptureConfig)
+    clips: ClipConfig = Field(default_factory=ClipConfig)
 
 
 class LineConfig(BaseModel):

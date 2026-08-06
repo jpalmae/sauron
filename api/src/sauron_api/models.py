@@ -35,7 +35,7 @@ class AnalyticsEvent(Base):
     priority: Mapped[str] = mapped_column(String(20), default="info")
     confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
     snapshot_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    clip_url: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    clip_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
     rule_id: Mapped[str] = mapped_column(String(100), default="")
     object_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     extra: Mapped[dict | None] = mapped_column(JSONBCompat, nullable=True, name="metadata")

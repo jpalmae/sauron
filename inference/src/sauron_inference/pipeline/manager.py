@@ -17,6 +17,7 @@ from ..detection.tensorrt_yolo import TensorRTYolo
 from ..rules.engine import RulesEngine
 from ..rules.events import Event
 from ..tracking.bytetrack import BYTETracker
+from .clip import ClipBuffer
 from .stream import EventCallback, NullCallback, StreamPipeline, TracksCallback
 
 log = logging.getLogger(__name__)
@@ -115,6 +116,17 @@ class PipelineManager:
                 if stream.roi
                 else None
             )
+            clip_cfg = self.cfg.defaults.clips
+            clip_buffer = (
+                ClipBuffer(
+                    preroll_seconds=clip_cfg.preroll_seconds,
+                    fps=stream.target_fps,
+                    jpeg_quality=clip_cfg.jpeg_quality,
+                    clip_fps=clip_cfg.clip_fps,
+                )
+                if clip_cfg.enabled
+                else None
+            )
             self.pipelines.append(
                 StreamPipeline(
                     source=source,
@@ -123,6 +135,7 @@ class PipelineManager:
                     on_tracks=self.on_tracks,
                     rules_engine=engine,
                     on_event=self.on_event,
+                    clip_buffer=clip_buffer,
                     queue_size=self.cfg.defaults.capture.queue_size,
                 )
             )

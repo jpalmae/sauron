@@ -33,14 +33,14 @@ class SnapshotStorage:
             )
         return self._client
 
-    def _put(self, key: str, data: bytes) -> None:
+    def _put(self, key: str, data: bytes, content_type: str = "image/jpeg") -> None:
         import io
 
         client = self._get_client()
         bucket = self._settings.s3_bucket
         if not client.bucket_exists(bucket):
             client.make_bucket(bucket)
-        client.put_object(bucket, key, io.BytesIO(data), len(data), content_type="image/jpeg")
+        client.put_object(bucket, key, io.BytesIO(data), len(data), content_type=content_type)
 
     async def upload_snapshot(
         self, camera_id: uuid.UUID, ts: datetime, jpeg: bytes
@@ -53,6 +53,19 @@ class SnapshotStorage:
             return key
         except Exception:
             log.exception("snapshot upload failed")
+            return None
+
+    async def upload_clip(
+        self, camera_id: uuid.UUID, ts: datetime, mp4: bytes
+    ) -> str | None:
+        if not self.enabled:
+            return None
+        key = f"clips/{camera_id}/{ts:%Y/%m/%d/%H%M%S}-{uuid.uuid4().hex[:8]}.mp4"
+        try:
+            await asyncio.to_thread(self._put, key, mp4, "video/mp4")
+            return key
+        except Exception:
+            log.exception("clip upload failed")
             return None
 
     def _presign(self, key: str) -> str | None:

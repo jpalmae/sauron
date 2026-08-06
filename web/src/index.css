@@ -1,0 +1,61 @@
+@import "@fontsource-variable/space-grotesk";
+@import "@fontsource/ibm-plex-sans/400.css";
+@import "@fontsource/ibm-plex-sans/500.css";
+@import "@fontsource/ibm-plex-sans/600.css";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+@import "tailwindcss";
+
+:root {
+  /* Runtime white-label overrides (BrandingProvider rewrites these) */
+  --brand-primary: #0e7c66;
+  --brand-accent: #f59e0b;
+}
+
+@theme inline {
+  --color-brand: var(--brand-primary);
+  --color-brand-accent: var(--brand-accent);
+}
+
+@theme {
+  /* SOC dark palette, tinted toward the brand teal — no pure black/white */
+  --color-base: oklch(0.155 0.014 185);
+  --color-panel: oklch(0.195 0.015 185);
+  --color-raised: oklch(0.235 0.016 185);
+  --color-line: oklch(0.30 0.018 185);
+  --color-ink: oklch(0.93 0.008 185);
+  --color-mut: oklch(0.66 0.015 185);
+  --color-dim: oklch(0.48 0.015 185);
+  --color-info: oklch(0.78 0.13 165);
+  --color-warn: oklch(0.82 0.14 85);
+  --color-crit: oklch(0.66 0.21 27);
+
+  --font-display: "Space Grotesk Variable", sans-serif;
+  --font-body: "IBM Plex Sans", sans-serif;
+  --font-mono: "IBM Plex Mono", monospace;
+}
+
+body {
+  @apply bg-base text-ink font-body antialiased;
+}
+
+/* severity flash for incoming critical alerts */
+@keyframes alert-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.alert-enter {
+  animation: alert-in 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* thin scrollbars for dense panels */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-line) transparent;
+}

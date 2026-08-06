@@ -1,0 +1,7 @@
+# MediaMTX: republishes camera RTSP as WebRTC (WHEP) for the dashboard grid.
+# One path per camera; the path name must equal the camera stream_id.
+paths:
+  cam-01:
+    source: rtsp://user:pass@192.168.1.10:554/Streaming/Channels/101
+  cam-02:
+    source: rtsp://user:pass@192.168.1.11:554/Streaming/Channels/101
