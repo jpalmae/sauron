@@ -28,6 +28,29 @@ class CaptureConfig(BaseModel):
     latency_ms: int = 200
     reconnect_backoff_s: float = 2.0
     queue_size: int = 2
+    use_gstreamer: bool = True
+    # GStreamer H.264 decoder element: nvv4l2decoder (DeepStream/JetPack),
+    # nvdec / nvh264dec (GStreamer nvcodec), or avdec_h264 (software).
+    decoder: str = "nvv4l2decoder"
+
+
+class OpenAIDetectorConfig(BaseModel):
+    """Remote inference via an OpenAI-compatible vision endpoint (chat.completions).
+
+    Works with vLLM, Ollama, llama.cpp server, OpenAI, etc. — local or remote.
+    """
+
+    base_url: str = "http://localhost:11434/v1"
+    model: str = "Qwen/Qwen2.5-VL-7B-Instruct"
+    # API key is read from this env var; never stored in YAML.
+    api_key_env: str = "OPENAI_API_KEY"
+    timeout_s: float = 20.0
+    max_image_side: int = 960
+
+
+class DetectorConfig(BaseModel):
+    backend: Literal["tensorrt", "openai", "mock"] = "tensorrt"
+    openai: OpenAIDetectorConfig = Field(default_factory=OpenAIDetectorConfig)
 
 
 class DefaultsConfig(BaseModel):
@@ -35,6 +58,7 @@ class DefaultsConfig(BaseModel):
     input_size: tuple[int, int] = (640, 640)
     confidence_threshold: float = 0.5
     nms_threshold: float = 0.45
+    detector: DetectorConfig = Field(default_factory=DetectorConfig)
     classes: dict[int, str] = Field(
         default_factory=lambda: {2: "car", 3: "motorcycle", 5: "bus", 7: "truck"}
     )
@@ -125,6 +149,10 @@ class StreamConfig(BaseModel):
     width: int = 1280
     height: int = 720
     roi: ROIConfig | None = None
+    detector: DetectorConfig | None = None
+
+    def resolved_detector(self, defaults: DefaultsConfig) -> DetectorConfig:
+        return self.detector or defaults.detector
 
     def resolved_engine(self, defaults: DefaultsConfig) -> str:
         return self.engine_path or defaults.engine_path
@@ -139,6 +167,9 @@ class StreamConfig(BaseModel):
 
 class AppConfig(BaseModel):
     name: str = "sauron"
+    # Event sinks; env vars SAURON_REDIS_URL / SAURON_API_INGEST_URL take precedence.
+    redis_url: str | None = None
+    api_ingest_url: str | None = None
 
 
 class PipelineConfig(BaseModel):

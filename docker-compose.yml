@@ -1,0 +1,129 @@
+name: sauron
+
+services:
+  inference:
+    build:
+      context: .
+      dockerfile: deploy/docker/inference.Dockerfile
+    image: sauron/inference:0.1.0
+    profiles: ["gpu"] # requires nvidia-container-toolkit on the host
+    restart: unless-stopped
+    environment:
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,video,utility
+      # event sink: Redis (default) or direct API ingest — comment one out
+      SAURON_REDIS_URL: redis://redis:6379/0
+      # SAURON_API_INGEST_URL: http://api:8000
+      # only for detector.backend=openai:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: [gpu, video]
+    volumes:
+      - ./inference/configs:/app/configs:ro
+      - models:/app/models:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+    command: ["run", "-c", "configs/pipeline.yaml"]
+
+  api:
+    build:
+      context: .
+      dockerfile: deploy/docker/api.Dockerfile
+    image: sauron/api:0.1.0
+    restart: unless-stopped
+    environment:
+      SAURON_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-sauron}:${POSTGRES_PASSWORD}@timescaledb:5432/${POSTGRES_DB:-sauron}
+      SAURON_REDIS_URL: redis://redis:6379/0
+      SAURON_S3_ENDPOINT: minio:9000
+      SAURON_S3_ACCESS_KEY: ${MINIO_ROOT_USER:-sauron}
+      SAURON_S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      SAURON_S3_BUCKET: ${EVENTS_BUCKET:-sauron-events}
+      SAURON_BRANDING_APP_NAME: ${APP_NAME:-Sauron}
+      SAURON_BRANDING_COMPANY_NAME: ${COMPANY_NAME:-}
+      SAURON_BRANDING_PRIMARY_COLOR: ${BRAND_PRIMARY_COLOR:-#0E7C66}
+    ports:
+      - "8000:8000"
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+
+  timescaledb:
+    image: timescale/timescaledb-ha:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-sauron}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-sauron}
+    ports:
+      - "5432:5432"
+    volumes:
+      - timescale-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-sauron}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in .env}
+    ports:
+      - "9000:9000" # S3 API
+      - "9001:9001" # console
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-sauron}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in .env}
+      EVENTS_BUCKET: ${EVENTS_BUCKET:-sauron-events}
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        mc alias set local http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}"
+        mc mb --ignore-existing "local/$${EVENTS_BUCKET}"
+        mc anonymous set download "local/$${EVENTS_BUCKET}/public"
+
+volumes:
+  timescale-data:
+  redis-data:
+  minio-data:
+  models:

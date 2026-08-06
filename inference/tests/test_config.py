@@ -64,3 +64,63 @@ def test_tracker_threshold_validation(tmp_path):
     }
     with pytest.raises(ValueError):
         load_config(_write(tmp_path, data))
+
+
+def test_capture_decoder_configurable(tmp_path):
+    data = {
+        "defaults": {"capture": {"decoder": "nvh264dec", "use_gstreamer": False}},
+        "streams": [{"id": "a", "source": "rtsp://x"}],
+    }
+    cfg = load_config(_write(tmp_path, data))
+    assert cfg.defaults.capture.decoder == "nvh264dec"
+    assert cfg.defaults.capture.use_gstreamer is False
+    # defaults when not specified
+    cfg2 = load_config(_write(tmp_path, {"streams": [{"id": "a", "source": "rtsp://x"}]}))
+    assert cfg2.defaults.capture.decoder == "nvv4l2decoder"
+    assert cfg2.defaults.capture.use_gstreamer is True
+
+
+def test_stream_roi_config(tmp_path):
+    data = {
+        "streams": [
+            {
+                "id": "a",
+                "source": "rtsp://x",
+                "roi": {
+                    "lines": [{"id": "L1", "points": [[0, 100], [500, 100]]}],
+                    "polygons": [
+                        {
+                            "id": "lane1",
+                            "points": [[0, 0], [100, 0], [100, 100]],
+                            "rules": ["stopped", "wrong_way"],
+                            "direction": [1, 0],
+                        }
+                    ],
+                    "homography": {
+                        "src_points": [[0, 0], [100, 0], [100, 100], [0, 100]],
+                        "dst_points": [[0, 0], [10, 0], [10, 10], [0, 10]],
+                    },
+                },
+            }
+        ]
+    }
+    cfg = load_config(_write(tmp_path, data))
+    roi = cfg.streams[0].roi
+    assert roi is not None
+    assert roi.lines[0].id == "L1"
+    assert roi.polygons[0].rules == ["stopped", "wrong_way"]
+    assert roi.thresholds.stopped_seconds == 15.0
+
+
+def test_roi_line_requires_two_points(tmp_path):
+    data = {
+        "streams": [
+            {
+                "id": "a",
+                "source": "rtsp://x",
+                "roi": {"lines": [{"id": "L1", "points": [[0, 100]]}]},
+            }
+        ]
+    }
+    with pytest.raises(ValueError):
+        load_config(_write(tmp_path, data))

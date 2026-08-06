@@ -1,5 +1,8 @@
 app:
   name: sauron
+  # Event sinks (env vars SAURON_REDIS_URL / SAURON_API_INGEST_URL override):
+  # redis_url: "redis://localhost:6379/0"
+  # api_ingest_url: "http://localhost:8000"   # direct POST /api/v1/events, no broker
 
 # GPUs available for inference. Streams are assigned round-robin
 # unless a stream overrides with `device_id`.
@@ -10,6 +13,17 @@ defaults:
   input_size: [640, 640]
   confidence_threshold: 0.50
   nms_threshold: 0.45
+  detector:
+    # tensorrt: local GPU engine (default, 10-15 FPS/stream on L4)
+    # openai:   remote/local OpenAI-compatible vision endpoint (vLLM, Ollama, OpenAI)
+    # mock:     synthetic detections for CI
+    backend: tensorrt
+    openai:
+      base_url: "http://localhost:11434/v1"
+      model: "Qwen/Qwen2.5-VL-7B-Instruct"
+      api_key_env: OPENAI_API_KEY   # key read from env, never from YAML
+      timeout_s: 20
+      max_image_side: 960
   # COCO vehicle classes -> project classes
   classes:
     2: car
