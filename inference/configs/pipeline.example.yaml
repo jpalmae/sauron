@@ -1,0 +1,51 @@
+app:
+  name: sauron
+
+# GPUs available for inference. Streams are assigned round-robin
+# unless a stream overrides with `device_id`.
+devices: [0]
+
+defaults:
+  engine_path: models/yolov8n_fp16.engine
+  input_size: [640, 640]
+  confidence_threshold: 0.50
+  nms_threshold: 0.45
+  # COCO vehicle classes -> project classes
+  classes:
+    2: car
+    3: motorcycle
+    5: bus
+    7: truck
+  tracker:
+    high_thresh: 0.50
+    low_thresh: 0.10
+    match_thresh: 0.80
+    max_time_lost: 30
+    history_size: 60
+  capture:
+    latency_ms: 200
+    reconnect_backoff_s: 2.0
+    queue_size: 2
+
+streams:
+  - id: cam-01
+    name: "Entrada Norte"
+    type: rtsp
+    source: "rtsp://user:pass@192.168.1.10:554/Streaming/Channels/101"
+    device_id: 0
+    target_fps: 15
+
+  - id: cam-02
+    name: "Salida Sur"
+    type: rtsp
+    source: "rtsp://user:pass@192.168.1.11:554/Streaming/Channels/101"
+    device_id: 0
+    target_fps: 15
+
+  # File/synthetic sources are useful for benchmarks and CI
+  # - id: bench
+  #   name: "Benchmark"
+  #   type: synthetic
+  #   source: ""
+  #   width: 1280
+  #   height: 720
