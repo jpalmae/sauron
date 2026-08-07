@@ -6,9 +6,12 @@ from collections.abc import Callable
 from ..config import PolygonConfig, PolygonRuleName, ROIConfig
 from ..types import Frame, TrackedObject
 from .base import Rule, RuleContext
+from .chair_occupancy import ChairOccupancyRule
 from .congestion import CongestionRule
 from .events import Event
+from .grouping import GroupingRule
 from .line_crossing import LineCrossingRule
+from .occupancy import OccupancyRule
 from .speed import SpeedEstimator
 from .stopped_vehicle import StoppedVehicleRule
 from .wrong_way import WrongWayRule
@@ -19,6 +22,9 @@ _POLYGON_RULES: dict[PolygonRuleName, Callable[[PolygonConfig], Rule]] = {
     "stopped": StoppedVehicleRule,
     "wrong_way": WrongWayRule,
     "congestion": CongestionRule,
+    "occupancy": OccupancyRule,
+    "grouping": GroupingRule,
+    "chair_occupancy": ChairOccupancyRule,
 }
 
 

@@ -46,6 +46,8 @@ class Settings(BaseSettings):
     ingest_token: str = ""
     # Optional JSON file with cameras to pre-provision at startup.
     seed_cameras_path: str = ""
+    # go2rtc WHEP bridge para preview en vivo de camaras RTSP (via nginx /go2rtc/).
+    live_go2rtc_enabled: bool = False
 
 
 _settings: Settings | None = None

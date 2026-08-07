@@ -54,7 +54,11 @@ class RTSPSource(FrameSource):
         self._stop = threading.Event()
 
     def _open(self) -> cv2.VideoCapture | None:
-        url = resolve_source(self.url)
+        try:
+            url = resolve_source(self.url)
+        except Exception as e:  # noqa: BLE001 - any resolver failure retries with backoff
+            log.warning("[%s] source resolution failed: %s", self.camera_id, e)
+            return None
         cap: cv2.VideoCapture | None = None
         if self.use_gstreamer:
             pipeline = build_gst_pipeline(url, self.cfg.latency_ms, self.decoder)

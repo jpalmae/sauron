@@ -30,7 +30,7 @@ class Camera(Base):
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(100))
     stream_id: Mapped[str] = mapped_column(String(100), unique=True, index=True)
-    rtsp_url: Mapped[str] = mapped_column(String(255), default="")
+    rtsp_url: Mapped[str] = mapped_column(Text, default="")
     roi_config: Mapped[dict | None] = mapped_column(JSONBCompat, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
@@ -41,7 +41,7 @@ class AnalyticsEvent(Base):
     __table_args__ = (UniqueConstraint("event_id", "timestamp"),)
 
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
-    event_id: Mapped[uuid.UUID] = mapped_column(default=uuid.uuid4)
+    event_id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     camera_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cameras.id"), index=True)
     event_type: Mapped[str] = mapped_column(String(50), index=True)
     priority: Mapped[str] = mapped_column(String(20), default="info")

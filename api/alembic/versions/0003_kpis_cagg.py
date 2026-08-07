@@ -51,7 +51,10 @@ def upgrade() -> None:
             schedule_interval => INTERVAL '30 minutes')
         """
     )
-    # backfill existing data immediately (policy only covers the trailing window)
+    # backfill existing data immediately (policy only covers the trailing window).
+    # TimescaleDB: refresh_continuous_aggregate() cannot run inside a transaction block,
+    # so commit the migration txn first, then run the refresh in autocommit.
+    op.execute("COMMIT")
     op.execute("CALL refresh_continuous_aggregate('analytics_kpis_hourly', NULL, NULL)")
 
 

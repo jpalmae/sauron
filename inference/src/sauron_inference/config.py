@@ -60,12 +60,15 @@ class OpenAIDetectorConfig(BaseModel):
 
 
 class DetectorConfig(BaseModel):
-    backend: Literal["tensorrt", "onnx", "openai", "mock"] = "tensorrt"
+    backend: Literal["tensorrt", "onnx", "openai", "mock", "pose", "pose_objects"] = "tensorrt"
     openai: OpenAIDetectorConfig = Field(default_factory=OpenAIDetectorConfig)
 
 
 class DefaultsConfig(BaseModel):
     model: str = DEFAULT_MODEL  # model catalog name; override per stream
+    # pose backends: pose model (people + keypoints) + objects model (chairs etc)
+    pose_onnx_path: str = "models/yolov8n-pose.onnx"
+    objects_onnx_path: str = "models/yolov8n.onnx"
     input_size: tuple[int, int] = (640, 640)
     confidence_threshold: float = 0.5
     nms_threshold: float = 0.45
@@ -98,7 +101,7 @@ class LineConfig(BaseModel):
         return v
 
 
-PolygonRuleName = Literal["stopped", "wrong_way", "congestion"]
+PolygonRuleName = Literal["stopped", "wrong_way", "congestion", "occupancy", "grouping", "chair_occupancy"]
 
 
 def _default_polygon_rules() -> list[PolygonRuleName]:
@@ -145,6 +148,7 @@ class ThresholdsConfig(BaseModel):
     congestion_occupancy: float = 0.6  # fraction of polygon area
     congestion_seconds: float = 30.0
     congestion_cooldown_s: float = 60.0
+    occupancy_interval_s: float = 30.0
 
 
 class ROIConfig(BaseModel):
@@ -162,6 +166,8 @@ class StreamConfig(BaseModel):
     device_id: int | None = None
     target_fps: int = 15
     model: str | None = None
+    pose_onnx_path: str | None = None
+    objects_onnx_path: str | None = None
     confidence_threshold: float | None = None
     width: int = 1280
     height: int = 720
@@ -178,6 +184,12 @@ class StreamConfig(BaseModel):
 
     def resolved_model(self, defaults: DefaultsConfig) -> str:
         return self.model or defaults.model
+
+    def resolved_pose_onnx(self, defaults: DefaultsConfig) -> str:
+        return self.pose_onnx_path or defaults.pose_onnx_path
+
+    def resolved_objects_onnx(self, defaults: DefaultsConfig) -> str:
+        return self.objects_onnx_path or defaults.objects_onnx_path
 
     def resolved_confidence(self, defaults: DefaultsConfig) -> float:
         return (
