@@ -4,16 +4,19 @@ import asyncio
 import base64
 import logging
 import time
+import uuid
 from urllib.parse import urlparse
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+import jwt
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..auth import get_current_user
+from ..auth import decode_token, get_current_user
+from ..config import get_settings
 from ..db import get_session
 from ..models import Camera, User
 
@@ -32,6 +35,28 @@ def _http_client() -> httpx.AsyncClient:
     if _http is None:
         _http = httpx.AsyncClient(timeout=15.0, follow_redirects=True)
     return _http
+
+
+async def hls_user(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    """Auth via Authorization header or ?token= (HLS players can't set headers)."""
+    settings = get_settings()
+    if not settings.auth_enabled:
+        return
+    token = request.query_params.get("token", "")
+    authz = request.headers.get("authorization", "")
+    if authz.lower().startswith("bearer "):
+        token = authz[7:]
+    user = None
+    try:
+        payload = decode_token(token)
+        user = await session.get(User, uuid.UUID(payload["sub"]))
+    except (jwt.PyJWTError, KeyError, ValueError):
+        user = None
+    if user is None or not user.is_active:
+        raise HTTPException(401, "unauthorized")
 
 
 class LiveUrl(BaseModel):
@@ -94,8 +119,9 @@ async def _source_url(camera: Camera) -> str:
     return src
 
 
-def _rewrite_manifest(manifest: str, base_url: str, stream_id: str) -> str:
+def _rewrite_manifest(manifest: str, base_url: str, stream_id: str, token: str = "") -> str:
     """Point every variant/segment URL at the same-origin proxy."""
+    suffix = f"&token={token}" if token else ""
     out: list[str] = []
     for line in manifest.splitlines():
         stripped = line.strip()
@@ -103,8 +129,8 @@ def _rewrite_manifest(manifest: str, base_url: str, stream_id: str) -> str:
             absolute = stripped if stripped.startswith("http") else f"{base_url}/{stripped}"
             host = urlparse(absolute).netloc
             _allowed_hosts.add(host)
-            token = base64.urlsafe_b64encode(absolute.encode()).decode()
-            line = f"/api/v1/streams/{stream_id}/hls/proxy?u={token}"
+            token_b64 = base64.urlsafe_b64encode(absolute.encode()).decode()
+            line = f"/api/v1/streams/{stream_id}/hls/proxy?u={token_b64}{suffix}"
         out.append(line)
     return "\n".join(out) + "\n"
 
@@ -112,8 +138,9 @@ def _rewrite_manifest(manifest: str, base_url: str, stream_id: str) -> str:
 @router.get("/{stream_id}/hls/playlist.m3u8")
 async def hls_playlist(
     stream_id: str,
+    request: Request,
     session: AsyncSession = Depends(get_session),
-    _: User = Depends(get_current_user),
+    _: None = Depends(hls_user),
 ):
     result = await session.execute(select(Camera).where(Camera.stream_id == stream_id))
     camera = result.scalar_one_or_none()
@@ -124,7 +151,8 @@ async def hls_playlist(
     if resp.status_code != 200:
         raise HTTPException(502, f"upstream manifest error: {resp.status_code}")
     base = url.rsplit("/", 1)[0]
-    body = _rewrite_manifest(resp.text, base, stream_id)
+    token = request.query_params.get("token", "")
+    body = _rewrite_manifest(resp.text, base, stream_id, token)
     return Response(
         body, media_type="application/vnd.apple.mpegurl", headers={"Cache-Control": "no-store"}
     )
@@ -134,7 +162,7 @@ async def hls_playlist(
 async def hls_proxy(
     stream_id: str,
     u: str,
-    _: User = Depends(get_current_user),
+    _: None = Depends(hls_user),
 ):
     try:
         url = base64.urlsafe_b64decode(u.encode()).decode()

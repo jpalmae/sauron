@@ -1,7 +1,7 @@
 import Hls from "hls.js";
 import { CameraOff, Maximize2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { api, type Camera } from "../lib/api";
+import { api, auth, type Camera } from "../lib/api";
 
 type TileState = "connecting" | "live" | "offline";
 
@@ -12,10 +12,15 @@ function HlsVideo({ url, onState }: { url: string; onState: (s: TileState) => vo
     const video = videoRef.current;
     if (!video) return;
     let hls: Hls | null = null;
+    // HLS players fetch without Authorization header -> carry the JWT in the URL
+    const token = auth.token();
+    const authedUrl = token
+      ? `${url}${url.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}`
+      : url;
 
     if (Hls.isSupported()) {
       hls = new Hls({ liveSyncDurationCount: 3 });
-      hls.loadSource(url);
+      hls.loadSource(authedUrl);
       hls.attachMedia(video);
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
         void video.play();
@@ -25,7 +30,7 @@ function HlsVideo({ url, onState }: { url: string; onState: (s: TileState) => vo
         if (data.fatal) onState("offline");
       });
     } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
-      video.src = url;
+      video.src = authedUrl;
       video.onloadedmetadata = () => {
         void video.play();
         onState("live");

@@ -23,8 +23,8 @@ defaults:
     clip_fps: 10
 
 streams:
-  # Cámara pública en vivo (Shinjuku, Tokio — YouTube Live).
-  # El prefijo yt: resuelve y refresca el manifiesto HLS automáticamente (yt-dlp).
+  # Cámaras públicas en vivo (YouTube Live). El prefijo yt: resuelve y
+  # refresca el manifiesto HLS automáticamente (yt-dlp).
   - id: shinjuku-live
     name: "Shinjuku Live (Tokio)"
     type: rtsp
@@ -46,3 +46,47 @@ streams:
         congestion_occupancy: 0.25
         congestion_seconds: 20
         congestion_cooldown_s: 60
+
+  - id: ih35-aquarena
+    name: "IH-35 @ Aquarena Springs (Texas)"
+    type: rtsp
+    source: "yt:https://www.youtube.com/watch?v=eHY0dJK7giA"
+    target_fps: 5
+    detector:
+      backend: onnx
+    roi:
+      lines:
+        - id: L1
+          points: [[300, 450], [950, 450]]
+      polygons:
+        - id: freeway
+          kind: lane
+          points: [[300, 150], [950, 150], [1000, 700], [250, 700]]
+          rules: [stopped, congestion]
+      thresholds:
+        stopped_seconds: 12
+        congestion_occupancy: 0.30
+        congestion_seconds: 30
+        congestion_cooldown_s: 120
+
+  - id: grand-avenue
+    name: "Grand Avenue Bridge (Glenwood Springs)"
+    type: rtsp
+    source: "yt:https://www.youtube.com/watch?v=SNvppiU1-IM"
+    target_fps: 5
+    detector:
+      backend: onnx
+    roi:
+      lines:
+        - id: L1
+          points: [[0, 550], [1280, 550]]
+      polygons:
+        - id: street
+          kind: lane
+          points: [[0, 400], [1280, 400], [1280, 700], [0, 700]]
+          rules: [stopped, congestion]
+      thresholds:
+        stopped_seconds: 12
+        congestion_occupancy: 0.30
+        congestion_seconds: 30
+        congestion_cooldown_s: 120
