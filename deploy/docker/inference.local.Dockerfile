@@ -16,7 +16,7 @@ ENV PATH="/root/.local/bin:/opt/venv/bin:$PATH"
 
 COPY inference/pyproject.toml ./
 COPY inference/src ./src
-RUN uv venv /opt/venv && uv pip install --python /opt/venv/bin/python -e .
+RUN uv venv /opt/venv && uv pip install --python /opt/venv/bin/python -e ".[live]"
 
 COPY inference/tools ./tools
 

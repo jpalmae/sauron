@@ -22,6 +22,9 @@ onvif = [
     "wsdiscovery>=2.1",
     "onvif-zeep>=0.2",
 ]
+live = [
+    "yt-dlp>=2026.1",
+]
 dev = [
     "pytest>=8.0",
     "ruff>=0.3",

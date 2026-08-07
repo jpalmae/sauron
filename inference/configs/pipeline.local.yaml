@@ -16,6 +16,7 @@ defaults:
     max_time_lost: 30
   capture:
     queue_size: 2
+    use_gstreamer: false   # CPU demo: FFmpeg decode (también lee HLS/m3u8)
   clips:
     enabled: true
     preroll_seconds: 6
@@ -52,3 +53,27 @@ streams:
     width: 1280
     height: 720
     target_fps: 15
+
+  # Cámara pública en vivo (Shinjuku, Tokio — YouTube Live).
+  # El prefijo yt: resuelve y refresca el manifiesto HLS automáticamente (yt-dlp).
+  - id: shinjuku-live
+    name: "Shinjuku Live (Tokio)"
+    type: rtsp
+    source: "yt:https://www.youtube.com/watch?v=gFRtAAmiFbE"
+    target_fps: 5
+    detector:
+      backend: onnx     # CPU real: yolov8n.onnx via OpenCV DNN
+    roi:
+      lines:
+        - id: L1
+          points: [[60, 520], [1000, 520]]
+      polygons:
+        - id: calzada
+          kind: lane
+          points: [[60, 380], [1000, 380], [1100, 710], [40, 710]]
+          rules: [stopped, congestion]
+      thresholds:
+        stopped_seconds: 10
+        congestion_occupancy: 0.25
+        congestion_seconds: 20
+        congestion_cooldown_s: 60

@@ -10,6 +10,7 @@ import cv2
 from ..config import CaptureConfig
 from ..types import Frame
 from .base import FrameSource
+from .resolve import resolve_source
 
 log = logging.getLogger(__name__)
 
@@ -53,16 +54,17 @@ class RTSPSource(FrameSource):
         self._stop = threading.Event()
 
     def _open(self) -> cv2.VideoCapture | None:
+        url = resolve_source(self.url)
         cap: cv2.VideoCapture | None = None
         if self.use_gstreamer:
-            pipeline = build_gst_pipeline(self.url, self.cfg.latency_ms, self.decoder)
+            pipeline = build_gst_pipeline(url, self.cfg.latency_ms, self.decoder)
             cap = cv2.VideoCapture(pipeline, cv2.CAP_GSTREAMER)
             if not cap.isOpened():
                 log.warning("[%s] GStreamer open failed, falling back to FFmpeg", self.camera_id)
                 cap.release()
                 cap = None
         if cap is None:
-            cap = cv2.VideoCapture(self.url, cv2.CAP_FFMPEG)
+            cap = cv2.VideoCapture(url, cv2.CAP_FFMPEG)
         return cap if cap.isOpened() else None
 
     def frames(self) -> Iterator[Frame]:

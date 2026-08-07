@@ -37,9 +37,25 @@ Login: `ADMIN_EMAIL` / `ADMIN_PASSWORD` del `.env` (admin bootstrap en el primer
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.local.yml --profile local up -d --build
-# 2 streams sintéticos con reglas activas → eventos LINE_CROSSING y CONGESTION
 # dashboard en http://localhost:8080 (admin@sauron.local / admin123 con el .env de demo)
 ```
+
+La demo levanta 3 cámaras preconfiguradas (seed): 2 sintéticas (conteo y
+congestión garantizados) y **Shinjuku Live** — cámara pública de tráfico en
+Tokio vía YouTube Live (prefijo `yt:` en `source`; yt-dlp resuelve y refresca
+el manifiesto HLS solo) con detección real ONNX en CPU (`detector.backend:
+onnx`, yolov8n en `inference/models/`, ~35 ms/frame).
+
+### Backends de detección
+
+`detector.backend` en `pipeline.yaml` (global o por stream):
+
+| backend | uso |
+|---|---|
+| `tensorrt` | GPU local, 10–15 FPS/stream (default, producción L4) |
+| `onnx` | CPU via OpenCV DNN, sin deps extra — demos/desarrollo (~5–15 FPS) |
+| `openai` | endpoint OpenAI-compatible (vLLM, Ollama, OpenAI): `base_url` + `model`; key vía env `OPENAI_API_KEY` |
+| `mock` | CI/desarrollo |
 
 ## Autenticación
 
@@ -51,13 +67,8 @@ Crear usuarios: tabla `users` (hash argon2) — endpoint de gestión en backlog.
 
 ## Inferencia local o remota
 
-`detector.backend` en `pipeline.yaml` (global o por stream):
-
-| backend | uso |
-|---|---|
-| `tensorrt` | GPU local, 10–15 FPS/stream (default) |
-| `openai` | endpoint OpenAI-compatible (vLLM, Ollama, OpenAI): `base_url` + `model`; key vía env `OPENAI_API_KEY` |
-| `mock` | CI/desarrollo |
+Tabla de backends arriba. Fuentes soportadas: `rtsp://`, archivos de video,
+`synthetic` y `yt:<youtube-watch-url>` (cámaras live públicas; extra `live`).
 
 ## Calibración
 

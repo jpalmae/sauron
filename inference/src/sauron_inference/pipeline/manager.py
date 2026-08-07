@@ -12,6 +12,7 @@ from ..capture.synthetic import FileSource, SyntheticSource
 from ..config import PipelineConfig, StreamConfig
 from ..detection.base import Detector
 from ..detection.mock import MockDetector
+from ..detection.onnx_dnn import OnnxDnnDetector
 from ..detection.openai_compat import OpenAICompatDetector
 from ..detection.tensorrt_yolo import TensorRTYolo
 from ..metrics import StreamMetrics
@@ -49,6 +50,14 @@ def build_detector(stream: StreamConfig, cfg: PipelineConfig, device_id: int) ->
     conf = stream.resolved_confidence(cfg.defaults)
     if det_cfg.backend == "mock":
         return MockDetector(classes=cfg.defaults.classes, conf_threshold=conf)
+    if det_cfg.backend == "onnx":
+        return OnnxDnnDetector(
+            onnx_path=stream.resolved_onnx(cfg.defaults),
+            input_size=cfg.defaults.input_size,
+            conf_threshold=conf,
+            nms_threshold=cfg.defaults.nms_threshold,
+            classes=cfg.defaults.classes,
+        )
     if det_cfg.backend == "openai":
         return OpenAICompatDetector(
             det_cfg.openai, classes=cfg.defaults.classes, conf_threshold=conf

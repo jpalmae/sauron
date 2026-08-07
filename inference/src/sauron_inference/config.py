@@ -58,12 +58,13 @@ class OpenAIDetectorConfig(BaseModel):
 
 
 class DetectorConfig(BaseModel):
-    backend: Literal["tensorrt", "openai", "mock"] = "tensorrt"
+    backend: Literal["tensorrt", "onnx", "openai", "mock"] = "tensorrt"
     openai: OpenAIDetectorConfig = Field(default_factory=OpenAIDetectorConfig)
 
 
 class DefaultsConfig(BaseModel):
     engine_path: str = "models/yolov8n_fp16.engine"
+    onnx_path: str = "models/yolov8n.onnx"
     input_size: tuple[int, int] = (640, 640)
     confidence_threshold: float = 0.5
     nms_threshold: float = 0.45
@@ -155,6 +156,7 @@ class StreamConfig(BaseModel):
     device_id: int | None = None
     target_fps: int = 15
     engine_path: str | None = None
+    onnx_path: str | None = None
     confidence_threshold: float | None = None
     width: int = 1280
     height: int = 720
@@ -166,6 +168,9 @@ class StreamConfig(BaseModel):
 
     def resolved_engine(self, defaults: DefaultsConfig) -> str:
         return self.engine_path or defaults.engine_path
+
+    def resolved_onnx(self, defaults: DefaultsConfig) -> str:
+        return self.onnx_path or defaults.onnx_path
 
     def resolved_confidence(self, defaults: DefaultsConfig) -> float:
         return (

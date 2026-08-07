@@ -44,6 +44,8 @@ class Settings(BaseSettings):
     admin_password: str = ""
     # Static bearer token for the inference pipeline (POST /events direct ingest).
     ingest_token: str = ""
+    # Optional JSON file with cameras to pre-provision at startup.
+    seed_cameras_path: str = ""
 
 
 _settings: Settings | None = None

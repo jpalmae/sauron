@@ -2,6 +2,12 @@
 #   docker compose -f docker-compose.yml -f docker-compose.local.yml --profile local up -d --build
 # inference-local: CPU image with synthetic streams + mock detector (no GPU needed).
 services:
+  api:
+    environment:
+      SAURON_SEED_CAMERAS_PATH: /seed/cameras.json
+    volumes:
+      - ./deploy/seed/cameras.local.json:/seed/cameras.json:ro
+
   inference-local:
     profiles: ["local"]
     build:
@@ -14,6 +20,7 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
     volumes:
       - ./inference/configs:/app/configs:ro
+      - ./inference/models:/app/models:ro
     ports:
       - "9100:9100"
     depends_on:

@@ -1,0 +1,36 @@
+[
+  {
+    "name": "Demo Norte",
+    "stream_id": "demo-norte",
+    "rtsp_url": ""
+  },
+  {
+    "name": "Demo Sur",
+    "stream_id": "demo-sur",
+    "rtsp_url": ""
+  },
+  {
+    "name": "Shinjuku Live (Tokio)",
+    "stream_id": "shinjuku-live",
+    "rtsp_url": "https://www.youtube.com/watch?v=gFRtAAmiFbE",
+    "roi_config": {
+      "lines": [
+        { "id": "L1", "points": [[60, 520], [1000, 520]] }
+      ],
+      "polygons": [
+        {
+          "id": "calzada",
+          "kind": "lane",
+          "points": [[60, 380], [1000, 380], [1100, 710], [40, 710]],
+          "rules": ["stopped", "congestion"]
+        }
+      ],
+      "thresholds": {
+        "stopped_seconds": 10,
+        "congestion_occupancy": 0.25,
+        "congestion_seconds": 20,
+        "congestion_cooldown_s": 60
+      }
+    }
+  }
+]

@@ -26,6 +26,10 @@ async def lifespan(app: FastAPI):
 
     async with get_session_factory()() as session:
         await ensure_bootstrap_admin(session)
+        if settings.seed_cameras_path:
+            from .seed import seed_cameras
+
+            await seed_cameras(session, settings.seed_cameras_path)
     consumer_task: asyncio.Task | None = None
     if settings.consumer_enabled:
         consumer_task = asyncio.create_task(run_consumer(app))
