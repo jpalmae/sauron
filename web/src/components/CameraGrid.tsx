@@ -113,14 +113,10 @@ function LiveTile({ camera }: { camera: Camera }) {
 
   return (
     <div className="group relative overflow-hidden rounded-lg border border-line bg-panel">
-      {state === "live" && source ? (
-        source.kind === "hls" ? (
-          <HlsVideo url={source.url} onState={setState} />
-        ) : (
-          <WhepVideo url={source.url} onState={setState} />
-        )
-      ) : (
-        <div className="grid aspect-video w-full place-items-center bg-[repeating-linear-gradient(45deg,transparent,transparent_10px,var(--color-panel)_10px,var(--color-panel)_20px)]">
+      {source?.kind === "hls" && <HlsVideo url={source.url} onState={setState} />}
+      {source?.kind === "whep" && <WhepVideo url={source.url} onState={setState} />}
+      {(!source || state !== "live") && (
+        <div className="absolute inset-0 grid place-items-center bg-[repeating-linear-gradient(45deg,transparent,transparent_10px,var(--color-panel)_10px,var(--color-panel)_20px)]">
           <div className="flex flex-col items-center gap-2 text-dim">
             <CameraOff size={28} strokeWidth={1.5} />
             <span className="font-mono text-[11px]">
@@ -129,6 +125,7 @@ function LiveTile({ camera }: { camera: Camera }) {
           </div>
         </div>
       )}
+      {!source && <div className="aspect-video w-full" />}
       <div className="absolute inset-x-0 top-0 flex items-center justify-between bg-gradient-to-b from-base/80 to-transparent px-3 py-2">
         <div className="flex items-center gap-2">
           <span
