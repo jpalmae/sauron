@@ -40,9 +40,12 @@ RUN uv venv /opt/venv --python 3.11 \
     && uv pip install --python /opt/venv/bin/python -e ".[gpu]"
 
 COPY inference/tools ./tools
+# Model catalog baked into the image (see tools/export_models.py); engines are
+# host-specific and built on first boot into the models volume.
+COPY inference/models/ /app/models-baked/
 
 # TensorRT engines are architecture-specific: mount or copy per-host builds.
 VOLUME ["/app/models", "/app/configs"]
 
-ENTRYPOINT ["sauron-inference"]
+ENTRYPOINT ["sh", "-c", "python tools/ensure_models.py ${ENSURE_ARGS:--c configs/pipeline.yaml} && exec sauron-inference \"$@\"", "sh"]
 CMD ["run", "-c", "configs/pipeline.yaml"]

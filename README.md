@@ -70,6 +70,25 @@ Crear usuarios: tabla `users` (hash argon2) — endpoint de gestión en backlog.
 Tabla de backends arriba. Fuentes soportadas: `rtsp://`, archivos de video,
 `synthetic` y `yt:<youtube-watch-url>` (cámaras live públicas; extra `live`).
 
+## Modelos de detección
+
+Catálogo horneado en las imágenes (sin descargas en runtime): **yolov8n/s/m**
+y **yolo11n/s**. Selección en `pipeline.yaml`:
+
+```yaml
+defaults:
+  model: yolov8n        # global
+streams:
+  - id: cam-01
+    model: yolo11s      # override por stream
+```
+
+- Backend `onnx` (CPU): usa el `.onnx` del catálogo directamente.
+- Backend `tensorrt` (GPU L4): `ensure_models` construye el `.engine` FP16 del
+  modelo elegido en el primer arranque del host (volumen `models`).
+- Regenerar el catálogo: `python inference/tools/export_models.py`
+  (requiere ultralytics; en CI corre automático antes del build con cache).
+
 ## Calibración
 
 **Velocidad (homografía)**: en el dashboard → Cámaras → ROI → herramienta

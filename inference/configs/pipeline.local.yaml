@@ -74,6 +74,7 @@ streams:
     type: rtsp
     source: "yt:https://www.youtube.com/watch?v=SNvppiU1-IM"
     target_fps: 5
+    model: yolo11n   # override del catálogo por stream
     detector:
       backend: onnx
     roi:

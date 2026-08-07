@@ -20,7 +20,6 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
     volumes:
       - ./inference/configs:/app/configs:ro
-      - ./inference/models:/app/models:ro
     ports:
       - "9100:9100"
     depends_on:

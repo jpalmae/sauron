@@ -6,6 +6,8 @@ from typing import Literal
 import yaml
 from pydantic import BaseModel, Field, field_validator
 
+from .models import DEFAULT_MODEL, validate_model
+
 Point = tuple[float, float]
 
 
@@ -63,8 +65,7 @@ class DetectorConfig(BaseModel):
 
 
 class DefaultsConfig(BaseModel):
-    engine_path: str = "models/yolov8n_fp16.engine"
-    onnx_path: str = "models/yolov8n.onnx"
+    model: str = DEFAULT_MODEL  # model catalog name; override per stream
     input_size: tuple[int, int] = (640, 640)
     confidence_threshold: float = 0.5
     nms_threshold: float = 0.45
@@ -75,6 +76,11 @@ class DefaultsConfig(BaseModel):
     tracker: TrackerConfig = Field(default_factory=TrackerConfig)
     capture: CaptureConfig = Field(default_factory=CaptureConfig)
     clips: ClipConfig = Field(default_factory=ClipConfig)
+
+    @field_validator("model")
+    @classmethod
+    def _known_model(cls, v: str) -> str:
+        return validate_model(v)
 
 
 class LineConfig(BaseModel):
@@ -155,22 +161,23 @@ class StreamConfig(BaseModel):
     source: str
     device_id: int | None = None
     target_fps: int = 15
-    engine_path: str | None = None
-    onnx_path: str | None = None
+    model: str | None = None
     confidence_threshold: float | None = None
     width: int = 1280
     height: int = 720
     roi: ROIConfig | None = None
     detector: DetectorConfig | None = None
 
+    @field_validator("model")
+    @classmethod
+    def _known_model(cls, v: str | None) -> str | None:
+        return validate_model(v) if v is not None else v
+
     def resolved_detector(self, defaults: DefaultsConfig) -> DetectorConfig:
         return self.detector or defaults.detector
 
-    def resolved_engine(self, defaults: DefaultsConfig) -> str:
-        return self.engine_path or defaults.engine_path
-
-    def resolved_onnx(self, defaults: DefaultsConfig) -> str:
-        return self.onnx_path or defaults.onnx_path
+    def resolved_model(self, defaults: DefaultsConfig) -> str:
+        return self.model or defaults.model
 
     def resolved_confidence(self, defaults: DefaultsConfig) -> float:
         return (

@@ -19,6 +19,8 @@ COPY inference/src ./src
 RUN uv venv /opt/venv && uv pip install --python /opt/venv/bin/python -e ".[live]"
 
 COPY inference/tools ./tools
+# Baked model catalog (ONNX CPU): everything works offline out of the box.
+COPY inference/models/ /app/models/
 
 VOLUME ["/app/configs"]
 EXPOSE 9100

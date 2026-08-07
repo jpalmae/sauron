@@ -9,7 +9,9 @@ app:
 devices: [0]
 
 defaults:
-  engine_path: models/yolov8n_fp16.engine
+  # Model from the catalog (baked into the images): yolov8n, yolov8s,
+  # yolov8m, yolo11n, yolo11s. Override per stream with `model:`.
+  model: yolov8n
   input_size: [640, 640]
   confidence_threshold: 0.50
   nms_threshold: 0.45
@@ -53,6 +55,7 @@ streams:
     source: "rtsp://user:pass@192.168.1.10:554/Streaming/Channels/101"
     device_id: 0
     target_fps: 15
+    # model: yolov8s   # per-stream override from the catalog
     roi:
       lines:
         - id: L1-north

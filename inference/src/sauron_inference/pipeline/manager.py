@@ -16,6 +16,7 @@ from ..detection.onnx_dnn import OnnxDnnDetector
 from ..detection.openai_compat import OpenAICompatDetector
 from ..detection.tensorrt_yolo import TensorRTYolo
 from ..metrics import StreamMetrics
+from ..models import engine_path, onnx_path
 from ..rules.engine import RulesEngine
 from ..rules.events import Event
 from ..tracking.bytetrack import BYTETracker
@@ -52,7 +53,7 @@ def build_detector(stream: StreamConfig, cfg: PipelineConfig, device_id: int) ->
         return MockDetector(classes=cfg.defaults.classes, conf_threshold=conf)
     if det_cfg.backend == "onnx":
         return OnnxDnnDetector(
-            onnx_path=stream.resolved_onnx(cfg.defaults),
+            onnx_path=onnx_path(stream.resolved_model(cfg.defaults)),
             input_size=cfg.defaults.input_size,
             conf_threshold=conf,
             nms_threshold=cfg.defaults.nms_threshold,
@@ -63,7 +64,7 @@ def build_detector(stream: StreamConfig, cfg: PipelineConfig, device_id: int) ->
             det_cfg.openai, classes=cfg.defaults.classes, conf_threshold=conf
         )
     return TensorRTYolo(
-        engine_path=stream.resolved_engine(cfg.defaults),
+        engine_path=engine_path(stream.resolved_model(cfg.defaults)),
         device_id=device_id,
         input_size=cfg.defaults.input_size,
         conf_threshold=conf,
