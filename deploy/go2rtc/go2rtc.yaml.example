@@ -1,0 +1,16 @@
+# go2rtc bridge example: exposes cloud cameras (Xiaomi/Mi Home, etc.) as RTSP
+# so Sauron can ingest them. Copy to go2rtc.yaml and finish setup in the WebUI:
+#   http://<host>:1984  ->  Add stream -> Xiaomi -> login with your Mi Home account.
+# The WebUI persists the account token + streams into this file on save.
+log:
+  level: info
+api:
+  listen: "0.0.0.0:1984"
+rtsp:
+  listen: ":8554"
+webrtc:
+  listen: ":8555"
+# xiaomi:
+#   "<mihome_account_id>": "V1:..."   # filled by the WebUI on login
+# streams:
+#   my-cam: "xiaomi://<account_id>:<region>@<camera_ip>?did=<device_id>&model=<model>"

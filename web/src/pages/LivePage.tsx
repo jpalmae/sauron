@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import AlertPanel, { type AlertEntry } from "../components/AlertPanel";
 import CameraGrid from "../components/CameraGrid";
+import OccupancyWidget from "../components/OccupancyWidget";
 import { api, type Camera } from "../lib/api";
 import { playAlertPing } from "../lib/audio";
 import { useAlertsWs, type WsAlert } from "../lib/ws";
@@ -66,6 +67,13 @@ export default function LivePage({
   return (
     <div className="flex h-full">
       <div className="min-w-0 flex-1 overflow-y-auto p-4">
+        {cameras.length > 0 && (
+          <div className="mb-3 grid gap-3 lg:grid-cols-2">
+            {cameras.map((c) => (
+              <OccupancyWidget key={c.id} cameraId={c.id} name={c.name} />
+            ))}
+          </div>
+        )}
         <CameraGrid cameras={cameras} />
       </div>
       <div className="w-80 shrink-0 xl:w-96">

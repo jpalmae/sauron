@@ -16,3 +16,6 @@ models/
 .DS_Store
 node_modules/
 *.tsbuildinfo
+
+# go2rtc runtime config (contains Mi Home token)
+deploy/go2rtc/go2rtc.yaml

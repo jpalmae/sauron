@@ -51,6 +51,27 @@ export interface KpiRow {
   congestion_minutes: number;
 }
 
+export interface OccupancyStats {
+  timestamp: string | null;
+  count: number | null;
+  by_class: Record<string, number> | null;
+  unique_total: number | null;
+  avg_dwell_s: number | null;
+  peak: number | null;
+  peak_today: number | null;
+  avg_last_hour: number | null;
+  posture: { standing: number; sitting: number; fallen: number; unknown: number } | null;
+  sit_to_stand: number | null;
+  stand_to_sit: number | null;
+  transitions: number | null;
+  unique_reid: number | null;
+  falls: number | null;
+  seats: number | null;
+  occupied_seats: number | null;
+  free_seats: number | null;
+  seat_utilization: number | null;
+}
+
 export interface RoiConfig {
   lines?: RoiLine[];
   polygons?: RoiPolygon[];
@@ -69,7 +90,7 @@ export interface RoiPolygon {
   id: string;
   points: [number, number][];
   kind?: "lane" | "parking" | "counting";
-  rules?: ("stopped" | "wrong_way" | "congestion")[];
+  rules?: ("stopped" | "wrong_way" | "congestion" | "occupancy")[];
   direction?: [number, number] | null;
 }
 
@@ -143,6 +164,8 @@ export const api = {
     apiFetch<{ kind: "hls" | "whep" | "none"; url: string }>(
       `/api/v1/streams/${streamId}/live-url`,
     ),
+  occupancy: (cameraId: string) =>
+    apiFetch<OccupancyStats>(`/api/v1/cameras/${cameraId}/occupancy`),
   kpis: (cameraId: string | null, since: Date, until: Date, bucket: string) => {
     const params = new URLSearchParams({ bucket });
     if (cameraId) params.set("camera_id", cameraId);
