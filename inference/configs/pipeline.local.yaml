@@ -1,5 +1,5 @@
-# Local demo config: 2 synthetic streams, mock detector, full rules on cam-01.
-# Events flow to Redis -> API -> dashboard. No camera or GPU needed.
+# Local demo config: live public camera (Shinjuku, Tokio) with real ONNX CPU
+# detection. Events flow to Redis -> API -> dashboard. No GPU needed.
 app:
   name: sauron
   redis_url: "redis://redis:6379/0"
@@ -7,11 +7,11 @@ app:
 devices: [0]
 
 defaults:
-  confidence_threshold: 0.50
+  confidence_threshold: 0.35
   detector:
     backend: mock
   tracker:
-    high_thresh: 0.50
+    high_thresh: 0.35
     low_thresh: 0.10
     max_time_lost: 30
   capture:
@@ -23,37 +23,6 @@ defaults:
     clip_fps: 10
 
 streams:
-  - id: demo-norte
-    name: "Demo Norte"
-    type: synthetic
-    source: ""
-    width: 1280
-    height: 720
-    target_fps: 15
-    roi:
-      lines:
-        - id: L1
-          points: [[640, 0], [640, 720]]   # objetos sintéticos cruzan en x=640
-      polygons:
-        - id: carril-1
-          kind: lane
-          points: [[0, 60], [1280, 60], [1280, 300], [0, 300]]
-          direction: [1, 0]
-          rules: [stopped, congestion]
-      thresholds:
-        stopped_seconds: 4
-        congestion_occupancy: 0.03
-        congestion_seconds: 8
-        congestion_cooldown_s: 20
-
-  - id: demo-sur
-    name: "Demo Sur"
-    type: synthetic
-    source: ""
-    width: 1280
-    height: 720
-    target_fps: 15
-
   # Cámara pública en vivo (Shinjuku, Tokio — YouTube Live).
   # El prefijo yt: resuelve y refresca el manifiesto HLS automáticamente (yt-dlp).
   - id: shinjuku-live

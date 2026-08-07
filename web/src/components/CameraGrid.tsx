@@ -1,35 +1,71 @@
+import Hls from "hls.js";
 import { CameraOff, Maximize2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import type { Camera } from "../lib/api";
+import { api, type Camera } from "../lib/api";
 
-/**
- * WHEP player (MediaMTX-compatible). Falls back to an offline tile when the
- * stream gateway is unreachable or no WHEP endpoint is configured.
- */
-function WhepTile({ camera }: { camera: Camera }) {
+type TileState = "connecting" | "live" | "offline";
+
+function HlsVideo({ url, onState }: { url: string; onState: (s: TileState) => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [state, setState] = useState<"connecting" | "live" | "offline">("connecting");
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    let hls: Hls | null = null;
+
+    if (Hls.isSupported()) {
+      hls = new Hls({ liveSyncDurationCount: 3 });
+      hls.loadSource(url);
+      hls.attachMedia(video);
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        void video.play();
+        onState("live");
+      });
+      hls.on(Hls.Events.ERROR, (_, data) => {
+        if (data.fatal) onState("offline");
+      });
+    } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+      video.src = url;
+      video.onloadedmetadata = () => {
+        void video.play();
+        onState("live");
+      };
+      video.onerror = () => onState("offline");
+    } else {
+      onState("offline");
+    }
+    return () => hls?.destroy();
+  }, [url, onState]);
+
+  return <video ref={videoRef} muted playsInline className="aspect-video w-full object-cover" />;
+}
+
+function WhepVideo({ url, onState }: { url: string; onState: (s: TileState) => void }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
     const pc = new RTCPeerConnection();
     let cancelled = false;
+    let live = false;
 
     async function connect() {
       try {
         pc.addTransceiver("video", { direction: "recvonly" });
-        pc.addTransceiver("audio", { direction: "recvonly" });
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
-        const resp = await fetch(`/whep/${camera.stream_id}`, {
+        const resp = await fetch(url, {
           method: "POST",
           headers: { "Content-Type": "application/sdp" },
           body: offer.sdp,
         });
         if (!resp.ok) throw new Error(String(resp.status));
         await pc.setRemoteDescription({ type: "answer", sdp: await resp.text() });
-        if (!cancelled) setState("live");
+        if (!cancelled) {
+          live = true;
+          onState("live");
+        }
       } catch {
-        if (!cancelled) setState("offline");
+        if (!cancelled) onState("offline");
       }
     }
 
@@ -37,8 +73,8 @@ function WhepTile({ camera }: { camera: Camera }) {
       if (videoRef.current) videoRef.current.srcObject = e.streams[0];
     };
     pc.onconnectionstatechange = () => {
-      if (pc.connectionState === "failed" || pc.connectionState === "disconnected") {
-        setState("offline");
+      if (live && (pc.connectionState === "failed" || pc.connectionState === "disconnected")) {
+        onState("offline");
       }
     };
     void connect();
@@ -46,12 +82,38 @@ function WhepTile({ camera }: { camera: Camera }) {
       cancelled = true;
       pc.close();
     };
+  }, [url, onState]);
+
+  return <video ref={videoRef} autoPlay muted playsInline className="aspect-video w-full object-cover" />;
+}
+
+function LiveTile({ camera }: { camera: Camera }) {
+  const [source, setSource] = useState<{ kind: string; url: string } | null>(null);
+  const [state, setState] = useState<TileState>("connecting");
+
+  useEffect(() => {
+    let alive = true;
+    api
+      .liveUrl(camera.stream_id)
+      .then((s) => {
+        if (!alive) return;
+        if (s.kind === "none") setState("offline");
+        setSource(s);
+      })
+      .catch(() => alive && setState("offline"));
+    return () => {
+      alive = false;
+    };
   }, [camera.stream_id]);
 
   return (
     <div className="group relative overflow-hidden rounded-lg border border-line bg-panel">
-      {state === "live" ? (
-        <video ref={videoRef} autoPlay muted playsInline className="aspect-video w-full object-cover" />
+      {state === "live" && source ? (
+        source.kind === "hls" ? (
+          <HlsVideo url={source.url} onState={setState} />
+        ) : (
+          <WhepVideo url={source.url} onState={setState} />
+        )
       ) : (
         <div className="grid aspect-video w-full place-items-center bg-[repeating-linear-gradient(45deg,transparent,transparent_10px,var(--color-panel)_10px,var(--color-panel)_20px)]">
           <div className="flex flex-col items-center gap-2 text-dim">
@@ -103,7 +165,7 @@ export default function CameraGrid({ cameras }: { cameras: Camera[] }) {
       }`}
     >
       {active.map((cam) => (
-        <WhepTile key={cam.id} camera={cam} />
+        <LiveTile key={cam.id} camera={cam} />
       ))}
     </div>
   );

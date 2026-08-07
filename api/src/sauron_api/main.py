@@ -11,7 +11,7 @@ from .config import get_settings
 from .consumer import run_consumer
 from .db import close_db, get_session_factory, init_db
 from .metrics import MetricsMiddleware
-from .routers import auth, branding, cameras, events, kpis, reports
+from .routers import auth, branding, cameras, events, kpis, reports, streams
 from .ws import router as ws_router
 
 log = logging.getLogger(__name__)
@@ -59,6 +59,7 @@ def create_app() -> FastAPI:
     app.include_router(events.router, prefix="/api/v1")
     app.include_router(kpis.router, prefix="/api/v1")
     app.include_router(reports.router, prefix="/api/v1")
+    app.include_router(streams.router, prefix="/api/v1")
     app.include_router(branding.router, prefix="/api/v1")
     app.include_router(ws_router)
 

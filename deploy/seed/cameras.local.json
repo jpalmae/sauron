@@ -1,15 +1,5 @@
 [
   {
-    "name": "Demo Norte",
-    "stream_id": "demo-norte",
-    "rtsp_url": ""
-  },
-  {
-    "name": "Demo Sur",
-    "stream_id": "demo-sur",
-    "rtsp_url": ""
-  },
-  {
     "name": "Shinjuku Live (Tokio)",
     "stream_id": "shinjuku-live",
     "rtsp_url": "https://www.youtube.com/watch?v=gFRtAAmiFbE",

@@ -139,6 +139,10 @@ export const api = {
   },
   ackEvent: (eventId: string) =>
     apiFetch<EventItem>(`/api/v1/events/${eventId}/ack`, { method: "POST" }),
+  liveUrl: (streamId: string) =>
+    apiFetch<{ kind: "hls" | "whep" | "none"; url: string }>(
+      `/api/v1/streams/${streamId}/live-url`,
+    ),
   kpis: (cameraId: string | null, since: Date, until: Date, bucket: string) => {
     const params = new URLSearchParams({ bucket });
     if (cameraId) params.set("camera_id", cameraId);
