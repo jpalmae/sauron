@@ -7,35 +7,25 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..auth import get_current_user
 from ..db import get_session
+from ..models import User
 from ..schemas import KpiRow
 
 router = APIRouter(prefix="/kpis", tags=["kpis"])
 
 KPIS_SQL = text(
     """
-    SELECT date_trunc(:bucket, e.timestamp) AS bucket,
-           e.camera_id                       AS camera_id,
-           e.metadata->>'vehicle_class'      AS vehicle_class,
-           count(*)                          AS total_count,
-           avg((e.metadata->>'speed_kmh')::float) AS avg_speed_kmh,
-           0.0                               AS congestion_minutes
-    FROM analytics_events e
-    WHERE e.event_type = 'LINE_CROSSING'
-      AND (:camera_id IS NULL OR e.camera_id = :camera_id)
-      AND e.timestamp >= :since AND e.timestamp <= :until
-    GROUP BY 1, 2, 3
-    UNION ALL
-    SELECT date_trunc(:bucket, e.timestamp),
-           e.camera_id,
-           NULL,
-           0,
-           NULL,
-           sum(coalesce((e.metadata->>'sustained_seconds')::float, 0)) / 60.0
-    FROM analytics_events e
-    WHERE e.event_type = 'CONGESTION'
-      AND (:camera_id IS NULL OR e.camera_id = :camera_id)
-      AND e.timestamp >= :since AND e.timestamp <= :until
+    SELECT date_trunc((:bucket)::text, h.bucket) AS bucket,
+           h.camera_id                       AS camera_id,
+           h.vehicle_class                   AS vehicle_class,
+           sum(h.total_count)                AS total_count,
+           sum(h.avg_speed_kmh * h.total_count) / nullif(sum(h.total_count), 0)
+                                             AS avg_speed_kmh,
+           sum(h.congestion_minutes)         AS congestion_minutes
+    FROM analytics_kpis_hourly h
+    WHERE ((:camera_id)::uuid IS NULL OR h.camera_id = (:camera_id)::uuid)
+      AND h.bucket >= :since AND h.bucket <= :until
     GROUP BY 1, 2, 3
     ORDER BY 1 DESC
     """
@@ -45,6 +35,7 @@ KPIS_SQL = text(
 @router.get("", response_model=list[KpiRow])
 async def get_kpis(
     session: AsyncSession = Depends(get_session),
+    _: User = Depends(get_current_user),
     camera_id: uuid.UUID | None = None,
     since: datetime | None = None,
     until: datetime | None = None,

@@ -1,5 +1,6 @@
-import { Activity, Camera, ChartColumn, ScrollText, Video } from "lucide-react";
-import { NavLink, Outlet } from "react-router-dom";
+import { Activity, Camera, ChartColumn, LogOut, ScrollText, Video } from "lucide-react";
+import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { auth } from "../lib/api";
 import { useBranding } from "../lib/branding";
 
 const NAV = [
@@ -11,6 +12,7 @@ const NAV = [
 
 export default function Layout({ wsConnected }: { wsConnected: boolean }) {
   const brand = useBranding();
+  const navigate = useNavigate();
   return (
     <div className="flex h-screen overflow-hidden">
       <aside className="flex w-56 shrink-0 flex-col border-r border-line bg-panel">
@@ -44,11 +46,22 @@ export default function Layout({ wsConnected }: { wsConnected: boolean }) {
             </NavLink>
           ))}
         </nav>
-        <div className="mt-auto px-5 py-4">
+        <div className="mt-auto space-y-2 px-5 py-4">
           <div className="flex items-center gap-2 font-mono text-[11px] text-mut">
             <Activity size={12} className={wsConnected ? "text-info" : "text-crit"} />
             {wsConnected ? "alertas en línea" : "alertas desconectadas"}
           </div>
+          {brand.auth_required && (
+            <button
+              onClick={() => {
+                auth.clear();
+                navigate("/login");
+              }}
+              className="flex items-center gap-2 font-mono text-[11px] text-dim transition-colors hover:text-ink"
+            >
+              <LogOut size={12} /> salir
+            </button>
+          )}
         </div>
       </aside>
       <main className="min-w-0 flex-1 overflow-y-auto">

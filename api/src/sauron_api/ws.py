@@ -4,6 +4,9 @@ import logging
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+from .auth import ws_auth
+from .db import get_session_factory
+
 log = logging.getLogger(__name__)
 
 
@@ -41,6 +44,8 @@ router = APIRouter()
 
 @router.websocket("/ws/alerts")
 async def alerts_ws(ws: WebSocket) -> None:
+    async with get_session_factory()() as session:
+        await ws_auth(ws, session)  # raises WebSocketException(4401) on auth failure
     await manager.connect(ws)
     log.info("ws client connected (%d total)", manager.client_count)
     try:

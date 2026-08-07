@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { auth } from "./api";
 
 export interface WsAlert {
   event_id: string;
@@ -16,7 +17,9 @@ export interface WsAlert {
 
 function wsUrl(): string {
   const proto = location.protocol === "https:" ? "wss" : "ws";
-  return `${proto}://${location.host}/ws/alerts`;
+  const token = auth.token();
+  const qs = token ? `?token=${encodeURIComponent(token)}` : "";
+  return `${proto}://${location.host}/ws/alerts${qs}`;
 }
 
 /** WebSocket with exponential backoff reconnect; calls onAlert per message. */

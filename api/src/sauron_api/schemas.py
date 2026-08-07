@@ -60,6 +60,8 @@ class EventRead(BaseModel):
     metadata: dict[str, Any] | None
     snapshot_url: str | None = None
     clip_url: str | None = None
+    acknowledged_at: datetime | None = None
+    acknowledged_by: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -89,3 +91,4 @@ class BrandingRead(BaseModel):
     primary_color: str
     accent_color: str
     support_url: str
+    auth_required: bool = False

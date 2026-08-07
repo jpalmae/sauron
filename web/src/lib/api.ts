@@ -7,6 +7,7 @@ export interface Branding {
   primary_color: string;
   accent_color: string;
   support_url: string;
+  auth_required: boolean;
 }
 
 export interface Camera {
@@ -30,6 +31,8 @@ export interface EventItem {
   metadata: Record<string, unknown> | null;
   snapshot_url: string | null;
   clip_url: string | null;
+  acknowledged_at: string | null;
+  acknowledged_by: string | null;
 }
 
 export interface EventPage {
@@ -76,15 +79,29 @@ export interface EventFilters {
   priority?: string;
   since?: string;
   until?: string;
+  pending_only?: boolean;
 }
+
+const TOKEN_KEY = "sauron_token";
+
+export const auth = {
+  token: () => localStorage.getItem(TOKEN_KEY),
+  set: (t: string) => localStorage.setItem(TOKEN_KEY, t),
+  clear: () => localStorage.removeItem(TOKEN_KEY),
+};
 
 const BASE = import.meta.env.VITE_API_BASE ?? "";
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const resp = await fetch(`${BASE}${path}`, {
-    headers: { "Content-Type": "application/json" },
-    ...init,
-  });
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const token = auth.token();
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const resp = await fetch(`${BASE}${path}`, { headers, ...init });
+  if (resp.status === 401 && !path.includes("/auth/login")) {
+    auth.clear();
+    if (location.pathname !== "/login") location.assign("/login");
+    throw new Error("unauthorized");
+  }
   if (!resp.ok) {
     const detail = await resp.text().catch(() => "");
     throw new Error(`API ${resp.status}: ${detail || resp.statusText}`);
@@ -94,22 +111,34 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   branding: () => apiFetch<Branding>("/api/v1/branding"),
+  login: (email: string, password: string) =>
+    apiFetch<{ access_token: string; email: string; role: string }>("/api/v1/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    }),
   cameras: () => apiFetch<Camera[]>("/api/v1/cameras"),
   createCamera: (c: Partial<Camera>) =>
     apiFetch<Camera>("/api/v1/cameras", { method: "POST", body: JSON.stringify(c) }),
   updateCamera: (id: string, patch: Partial<Camera>) =>
     apiFetch<Camera>(`/api/v1/cameras/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
   deleteCamera: (id: string) =>
-    fetch(`${BASE}/api/v1/cameras/${id}`, { method: "DELETE" }).then((r) => {
+    fetch(`${BASE}/api/v1/cameras/${id}`, {
+      method: "DELETE",
+      headers: auth.token() ? { Authorization: `Bearer ${auth.token()}` } : {},
+    }).then((r) => {
       if (!r.ok) throw new Error(`API ${r.status}`);
     }),
   events: (filters: EventFilters = {}, page = 1, pageSize = 50) => {
     const params = new URLSearchParams();
-    Object.entries(filters).forEach(([k, v]) => v && params.set(k, v));
+    Object.entries(filters).forEach(([k, v]) => {
+      if (v !== undefined && v !== "" && v !== false) params.set(k, String(v));
+    });
     params.set("page", String(page));
     params.set("page_size", String(pageSize));
     return apiFetch<EventPage>(`/api/v1/events?${params}`);
   },
+  ackEvent: (eventId: string) =>
+    apiFetch<EventItem>(`/api/v1/events/${eventId}/ack`, { method: "POST" }),
   kpis: (cameraId: string | null, since: Date, until: Date, bucket: string) => {
     const params = new URLSearchParams({ bucket });
     if (cameraId) params.set("camera_id", cameraId);
@@ -119,8 +148,25 @@ export const api = {
   },
   eventsCsvUrl: (filters: EventFilters = {}) => {
     const params = new URLSearchParams();
-    Object.entries(filters).forEach(([k, v]) => v && params.set(k, v));
+    Object.entries(filters).forEach(([k, v]) => {
+      if (v !== undefined && v !== "" && v !== false) params.set(k, String(v));
+    });
     return `${BASE}/api/v1/reports/events.csv?${params}`;
   },
   kpisCsvUrl: (bucket: string) => `${BASE}/api/v1/reports/kpis.csv?bucket=${bucket}`,
+  /** CSV download with auth header (plain <a href> can't carry JWT). */
+  download: async (path: string, filename: string) => {
+    const headers: Record<string, string> = {};
+    const token = auth.token();
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    const resp = await fetch(`${BASE}${path}`, { headers });
+    if (!resp.ok) throw new Error(`API ${resp.status}`);
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  },
 };

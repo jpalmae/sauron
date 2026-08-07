@@ -33,16 +33,13 @@ ENV PATH="/root/.local/bin:/opt/venv/bin:$PATH"
 
 WORKDIR /app
 
-# Dependencies first for layer caching. GPU extras: tensorrt + cuda-python wheels.
+# Dependencies (incl. GPU extras: tensorrt + cuda-python wheels).
 COPY inference/pyproject.toml ./
-RUN uv venv /opt/venv --python 3.11 \
-    && uv pip install --python /opt/venv/bin/python \
-        "numpy>=1.26" "opencv-python-headless>=4.9" "pydantic>=2.6" \
-        "PyYAML>=6.0" "scipy>=1.12" "tensorrt>=10" "cuda-python>=12.3"
-
 COPY inference/src ./src
+RUN uv venv /opt/venv --python 3.11 \
+    && uv pip install --python /opt/venv/bin/python -e ".[gpu]"
+
 COPY inference/tools ./tools
-RUN uv pip install --python /opt/venv/bin/python --no-deps -e .
 
 # TensorRT engines are architecture-specific: mount or copy per-host builds.
 VOLUME ["/app/models", "/app/configs"]

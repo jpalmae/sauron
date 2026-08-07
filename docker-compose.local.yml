@@ -1,0 +1,22 @@
+# Local demo override (ARM64 Macs, CPU-only):
+#   docker compose -f docker-compose.yml -f docker-compose.local.yml --profile local up -d --build
+# inference-local: CPU image with synthetic streams + mock detector (no GPU needed).
+services:
+  inference-local:
+    profiles: ["local"]
+    build:
+      context: .
+      dockerfile: deploy/docker/inference.local.Dockerfile
+    image: sauron/inference:local
+    restart: unless-stopped
+    environment:
+      SAURON_REDIS_URL: redis://redis:6379/0
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    volumes:
+      - ./inference/configs:/app/configs:ro
+    ports:
+      - "9100:9100"
+    depends_on:
+      redis:
+        condition: service_healthy
+    command: ["run", "-c", "configs/pipeline.local.yaml"]

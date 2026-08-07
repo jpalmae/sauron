@@ -10,7 +10,7 @@ class BrandingSettings(BaseSettings):
     company_name: str = ""
     logo_light_url: str = "/brand/logo-light.svg"
     logo_dark_url: str = "/brand/logo-dark.svg"
-    favicon_url: str = "/brand/favicon.ico"
+    favicon_url: str = "/brand/favicon.svg"
     primary_color: str = "#0E7C66"
     accent_color: str = "#F59E0B"
     support_url: str = ""
@@ -25,12 +25,25 @@ class Settings(BaseSettings):
     consumer_enabled: bool = True
 
     s3_endpoint: str = ""  # empty disables snapshot storage (dev)
+    # Browser-reachable host for presigned URLs; default assumes the web
+    # container proxies /<bucket>/ to MinIO on the same origin (port 8080).
+    s3_public_endpoint: str = "localhost:8080"
     s3_access_key: str = ""
     s3_secret_key: str = ""
     s3_bucket: str = "sauron-events"
     s3_secure: bool = False
 
     cors_origins: list[str] = ["http://localhost:5173"]
+
+    # Auth (JWT). Disabled by default for local dev; enable in production.
+    auth_enabled: bool = False
+    secret_key: str = "dev-secret-change-me"
+    token_ttl_minutes: int = 720
+    # Bootstrap admin created at startup when no users exist.
+    admin_email: str = "admin@sauron.local"
+    admin_password: str = ""
+    # Static bearer token for the inference pipeline (POST /events direct ingest).
+    ingest_token: str = ""
 
 
 _settings: Settings | None = None

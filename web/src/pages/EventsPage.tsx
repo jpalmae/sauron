@@ -16,18 +16,38 @@ import {
 
 const EVENT_TYPES = ["LINE_CROSSING", "STOPPED_VEHICLE", "OBSTRUCTION", "WRONG_WAY", "CONGESTION"];
 
-function Evidence({ event }: { event: EventItem }) {
-  if (event.clip_url) {
-    return (
-      <video src={event.clip_url} controls preload="metadata" className="w-full rounded border border-line" />
-    );
-  }
-  if (event.snapshot_url) {
-    return (
-      <img src={event.snapshot_url} alt="evidencia" className="w-full rounded border border-line object-cover" />
-    );
-  }
-  return <span className="font-mono text-[11px] text-dim">sin evidencia</span>;
+function Evidence({
+  event,
+  onAck,
+}: {
+  event: EventItem;
+  onAck: (id: string) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      {event.clip_url ? (
+        <video src={event.clip_url} controls preload="metadata" className="w-full rounded border border-line" />
+      ) : event.snapshot_url ? (
+        <img src={event.snapshot_url} alt="evidencia" className="w-full rounded border border-line object-cover" />
+      ) : (
+        <span className="font-mono text-[11px] text-dim">sin evidencia</span>
+      )}
+      {event.acknowledged_at ? (
+        <p className="font-mono text-[11px] text-info">
+          acusada por {event.acknowledged_by}
+        </p>
+      ) : (
+        event.priority !== "info" && (
+          <button
+            onClick={() => onAck(event.event_id)}
+            className="rounded-md border border-line px-3 py-1 text-xs text-mut transition-colors hover:border-info hover:text-info"
+          >
+            Acusar recibo
+          </button>
+        )
+      )}
+    </div>
+  );
 }
 
 export default function EventsPage() {
@@ -47,6 +67,26 @@ export default function EventsPage() {
 
   const camName = (id: string) => cameras.find((c) => c.id === id)?.name ?? id.slice(0, 8);
   const pages = data ? Math.max(1, Math.ceil(data.total / data.page_size)) : 1;
+
+  const onAck = (eventId: string) => {
+    api
+      .ackEvent(eventId)
+      .then((updated) => {
+        setData((prev) =>
+          prev
+            ? {
+                ...prev,
+                items: prev.items.map((i) =>
+                  i.event_id === eventId
+                    ? { ...i, acknowledged_at: updated.acknowledged_at, acknowledged_by: updated.acknowledged_by }
+                    : i,
+                ),
+              }
+            : prev,
+        );
+      })
+      .catch(console.error);
+  };
 
   return (
     <div className="space-y-4 p-5">
@@ -96,12 +136,23 @@ export default function EventsPage() {
             <option value="warning">warning</option>
             <option value="critical">critical</option>
           </select>
-          <a
-            href={api.eventsCsvUrl(filters)}
+          <label className="flex items-center gap-1.5 text-sm text-mut">
+            <input
+              type="checkbox"
+              checked={filters.pending_only ?? false}
+              onChange={(e) => {
+                setPage(1);
+                setFilters((f) => ({ ...f, pending_only: e.target.checked || undefined }));
+              }}
+            />
+            sin acusar
+          </label>
+          <button
+            onClick={() => void api.download(`/api/v1/reports/events.csv?${new URLSearchParams(Object.entries(filters).filter(([, v]) => v) as [string, string][])}`, "eventos.csv")}
             className="flex items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-sm text-mut transition-colors hover:text-ink"
           >
             <Download size={14} /> CSV
-          </a>
+          </button>
         </div>
       </div>
 
@@ -149,7 +200,7 @@ export default function EventsPage() {
                     <td colSpan={6} className="px-4 py-3">
                       <div className="flex gap-4">
                         <div className="w-72 shrink-0">
-                          <Evidence event={e} />
+                          <Evidence event={e} onAck={onAck} />
                         </div>
                         <pre className="min-w-0 flex-1 overflow-x-auto font-mono text-[11px] leading-relaxed text-mut">
                           {JSON.stringify(e.metadata, null, 2)}

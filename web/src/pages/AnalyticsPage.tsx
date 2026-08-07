@@ -109,12 +109,12 @@ export default function AnalyticsPage() {
               </button>
             ))}
           </div>
-          <a
-            href={api.kpisCsvUrl(range.bucket)}
+          <button
+            onClick={() => void api.download(`/api/v1/reports/kpis.csv?bucket=${range.bucket}`, "kpis.csv")}
             className="flex items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-sm text-mut transition-colors hover:text-ink"
           >
             <Download size={14} /> CSV
-          </a>
+          </button>
         </div>
       </div>
 

@@ -58,6 +58,11 @@ async def ingest_event(
         confidence=payload.confidence,
         rule_id=payload.rule_id,
         object_id=payload.object_id,
+        vehicle_class=(
+            str(payload.metadata["vehicle_class"])
+            if payload.metadata.get("vehicle_class")
+            else None
+        ),
         extra=payload.metadata,
         snapshot_key=snapshot_key,
         clip_key=clip_key,

@@ -1,4 +1,4 @@
-import { Volume2, VolumeX } from "lucide-react";
+import { Check, Volume2, VolumeX } from "lucide-react";
 import { useState } from "react";
 import type { EventItem } from "../lib/api";
 import {
@@ -13,13 +13,22 @@ export interface AlertEntry extends EventItem {
   live?: boolean;
 }
 
-function AlertRow({ alert, now }: { alert: AlertEntry; now: number }) {
+function AlertRow({
+  alert,
+  now,
+  onAck,
+}: {
+  alert: AlertEntry;
+  now: number;
+  onAck: (id: string) => void;
+}) {
   const meta = alert.metadata ?? {};
   const cls = String(meta.vehicle_class ?? "");
   const Icon = CLASS_ICONS[cls];
+  const acked = Boolean(alert.acknowledged_at);
   return (
     <div
-      className={`flex gap-3 border-b border-line/60 px-4 py-3 ${alert.live ? "alert-enter" : ""}`}
+      className={`group flex gap-3 border-b border-line/60 px-4 py-3 ${alert.live ? "alert-enter" : ""} ${acked ? "opacity-50" : ""}`}
     >
       <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${SEVERITY_DOT[alert.priority]}`} />
       <div className="min-w-0 flex-1">
@@ -38,7 +47,21 @@ function AlertRow({ alert, now }: { alert: AlertEntry; now: number }) {
             <span className="font-mono text-[11px]">{meta.speed_kmh} km/h</span>
           )}
         </div>
+        {acked && (
+          <div className="mt-0.5 font-mono text-[10px] text-info">
+            acusada por {alert.acknowledged_by}
+          </div>
+        )}
       </div>
+      {!acked && alert.priority !== "info" && (
+        <button
+          onClick={() => onAck(alert.event_id)}
+          title="Acusar recibo"
+          className="self-center rounded border border-line p-1.5 text-mut opacity-0 transition-opacity hover:border-info hover:text-info group-hover:opacity-100"
+        >
+          <Check size={13} />
+        </button>
+      )}
       {alert.snapshot_url && (
         <img
           src={alert.snapshot_url}
@@ -54,10 +77,12 @@ export default function AlertPanel({
   alerts,
   soundOn,
   onToggleSound,
+  onAck,
 }: {
   alerts: AlertEntry[];
   soundOn: boolean;
   onToggleSound: () => void;
+  onAck: (id: string) => void;
 }) {
   const [now] = useState(() => Date.now());
   return (
@@ -81,7 +106,7 @@ export default function AlertPanel({
             </p>
           </div>
         ) : (
-          alerts.map((a) => <AlertRow key={a.event_id} alert={a} now={now} />)
+          alerts.map((a) => <AlertRow key={a.event_id} alert={a} now={now} onAck={onAck} />)
         )}
       </div>
     </div>

@@ -18,6 +18,10 @@ gpu = [
     "tensorrt>=8.6",
     "cuda-python>=12.3",
 ]
+onvif = [
+    "wsdiscovery>=2.1",
+    "onvif-zeep>=0.2",
+]
 dev = [
     "pytest>=8.0",
     "ruff>=0.3",

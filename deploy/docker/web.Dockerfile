@@ -15,4 +15,4 @@ COPY --from=build /app/dist /usr/share/nginx/html
 # White-label override: mount client assets over /brand without rebuilding:
 #   -v ./brand:/usr/share/nginx/html/brand:ro
 EXPOSE 80
-HEALTHCHECK --interval=10s --timeout=3s CMD wget -qO- http://localhost/ >/dev/null || exit 1
+HEALTHCHECK --interval=10s --timeout=3s CMD wget -qO- http://127.0.0.1/ >/dev/null || exit 1

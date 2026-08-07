@@ -31,12 +31,11 @@ def upgrade() -> None:
         sa.Column("roi_config", JSON_TYPE, nullable=True),
         sa.Column("is_active", sa.Boolean, server_default=sa.true()),
     )
-    op.create_index("ix_cameras_stream_id", "cameras", ["stream_id"], unique=True)
 
     op.create_table(
         "analytics_events",
         sa.Column("timestamp", sa.DateTime(timezone=True), primary_key=True),
-        sa.Column("event_id", sa.Uuid, unique=True),
+        sa.Column("event_id", sa.Uuid),
         sa.Column("camera_id", sa.Uuid, sa.ForeignKey("cameras.id"), index=True),
         sa.Column("event_type", sa.String(50), index=True),
         sa.Column("priority", sa.String(20), server_default="info"),
@@ -46,9 +45,9 @@ def upgrade() -> None:
         sa.Column("rule_id", sa.String(100), server_default=""),
         sa.Column("object_id", sa.Integer, nullable=True),
         sa.Column("metadata", JSON_TYPE, nullable=True),
+        # TimescaleDB: unique constraints must include the partitioning column.
+        sa.UniqueConstraint("event_id", "timestamp"),
     )
-    op.create_index("ix_analytics_events_camera_id", "analytics_events", ["camera_id"])
-    op.create_index("ix_analytics_events_event_type", "analytics_events", ["event_type"])
 
     op.create_table(
         "hourly_kpis",

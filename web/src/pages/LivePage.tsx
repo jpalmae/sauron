@@ -33,6 +33,8 @@ export default function LivePage({
             timestamp: a.timestamp,
             snapshot_url: null,
             clip_url: null,
+            acknowledged_at: null,
+            acknowledged_by: null,
             live: true,
           } as AlertEntry,
           ...prev,
@@ -46,6 +48,21 @@ export default function LivePage({
   const connected = useAlertsWs(onAlert);
   useEffect(() => onWsState(connected), [connected, onWsState]);
 
+  const onAck = (eventId: string) => {
+    api
+      .ackEvent(eventId)
+      .then((updated) => {
+        setAlerts((prev) =>
+          prev.map((a) =>
+            a.event_id === eventId
+              ? { ...a, acknowledged_at: updated.acknowledged_at, acknowledged_by: updated.acknowledged_by }
+              : a,
+          ),
+        );
+      })
+      .catch(console.error);
+  };
+
   return (
     <div className="flex h-full">
       <div className="min-w-0 flex-1 overflow-y-auto p-4">
@@ -56,6 +73,7 @@ export default function LivePage({
           alerts={alerts}
           soundOn={soundOn}
           onToggleSound={() => setSoundOn((s) => !s)}
+          onAck={onAck}
         />
       </div>
     </div>

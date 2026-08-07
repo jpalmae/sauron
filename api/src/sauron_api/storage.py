@@ -16,6 +16,7 @@ class SnapshotStorage:
     def __init__(self) -> None:
         self._settings = get_settings()
         self._client = None
+        self._public_client = None
 
     @property
     def enabled(self) -> bool:
@@ -32,6 +33,26 @@ class SnapshotStorage:
                 secure=self._settings.s3_secure,
             )
         return self._client
+
+    def _get_public_client(self):
+        """Client bound to the browser-reachable endpoint (presigned URLs).
+
+        Built with an explicit region so presigning needs no network call —
+        the endpoint only has to be reachable from the browser (e.g. the
+        nginx-proxied bucket path on the web origin).
+        """
+        if self._public_client is None:
+            from minio import Minio
+
+            endpoint = self._settings.s3_public_endpoint or self._settings.s3_endpoint
+            self._public_client = Minio(
+                endpoint,
+                access_key=self._settings.s3_access_key,
+                secret_key=self._settings.s3_secret_key,
+                secure=self._settings.s3_secure,
+                region="us-east-1",
+            )
+        return self._public_client
 
     def _put(self, key: str, data: bytes, content_type: str = "image/jpeg") -> None:
         import io
@@ -72,7 +93,7 @@ class SnapshotStorage:
         from datetime import timedelta
 
         try:
-            return self._get_client().presigned_get_object(
+            return self._get_public_client().presigned_get_object(
                 self._settings.s3_bucket, key, expires=timedelta(hours=1)
             )
         except Exception:

@@ -7,20 +7,15 @@ FROM python:3.11-slim AS base
 ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh || pip install uv
-ENV PATH="/root/.local/bin:/opt/venv/bin:$PATH"
+RUN pip install --no-cache-dir uv
+ENV PATH="/opt/venv/bin:$PATH"
 
 COPY api/pyproject.toml ./
-RUN uv venv /opt/venv \
-    && uv pip install --python /opt/venv/bin/python \
-        "fastapi>=0.110" "uvicorn[standard]>=0.29" "sqlalchemy[asyncio]>=2.0" \
-        "asyncpg>=0.29" "alembic>=1.13" "pydantic>=2.6" "pydantic-settings>=2.2" \
-        "redis>=5.0" "minio>=7.2"
-
 COPY api/src ./src
+RUN uv venv /opt/venv && uv pip install --python /opt/venv/bin/python -e .
+
 COPY api/alembic.ini ./alembic.ini
 COPY api/alembic ./alembic
-RUN uv pip install --python /opt/venv/bin/python --no-deps -e .
 
 EXPOSE 8000
 HEALTHCHECK --interval=10s --timeout=3s --retries=5 \

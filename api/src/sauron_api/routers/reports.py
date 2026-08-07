@@ -10,8 +10,9 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..auth import get_current_user
 from ..db import get_session
-from ..models import AnalyticsEvent, Camera
+from ..models import AnalyticsEvent, Camera, User
 from .kpis import KPIS_SQL
 
 router = APIRouter(prefix="/reports", tags=["reports"])
@@ -22,6 +23,7 @@ MAX_ROWS = 50_000
 @router.get("/events.csv")
 async def events_csv(
     session: AsyncSession = Depends(get_session),
+    _: User = Depends(get_current_user),
     camera_id: uuid.UUID | None = None,
     event_type: str | None = None,
     priority: str | None = None,
@@ -86,6 +88,7 @@ async def events_csv(
 @router.get("/kpis.csv")
 async def kpis_csv(
     session: AsyncSession = Depends(get_session),
+    _: User = Depends(get_current_user),
     camera_id: uuid.UUID | None = None,
     since: datetime | None = None,
     until: datetime | None = None,

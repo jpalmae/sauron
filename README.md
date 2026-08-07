@@ -20,7 +20,7 @@ reglas espacio-temporales → alertas en vivo, KPIs y reportería.
 ## Quickstart (host GPU)
 
 ```bash
-cp .env.example .env                     # editar secretos
+cp .env.example .env                     # editar secretos (DB, MinIO, JWT, admin)
 docker compose up -d                     # infra + api + web  → http://localhost:8080
 # engine TensorRT (una vez, en el host L4):
 pip install ultralytics tensorrt cuda-python
@@ -30,6 +30,24 @@ docker compose --profile gpu up -d inference
 docker compose --profile streaming up -d mediamtx      # live grid WebRTC (opcional)
 docker compose --profile observability up -d prometheus # métricas (opcional)
 ```
+
+Login: `ADMIN_EMAIL` / `ADMIN_PASSWORD` del `.env` (admin bootstrap en el primer arranque).
+
+### Demo local sin GPU (Mac/Linux, CPU)
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.local.yml --profile local up -d --build
+# 2 streams sintéticos con reglas activas → eventos LINE_CROSSING y CONGESTION
+# dashboard en http://localhost:8080 (admin@sauron.local / admin123 con el .env de demo)
+```
+
+## Autenticación
+
+JWT con roles (`admin` escribe, `viewer` lee). `SAURON_AUTH_ENABLED=true` en
+compose. Endpoints públicos: `/healthz`, `/api/v1/branding` (para la página de
+login). La ingesta directa (`POST /api/v1/events`) acepta `SAURON_INGEST_TOKEN`
+o JWT de admin; la vía Redis es interna al cluster. El WS usa `?token=`.
+Crear usuarios: tabla `users` (hash argon2) — endpoint de gestión en backlog.
 
 ## Inferencia local o remota
 
@@ -76,6 +94,20 @@ helm install sauron deploy/helm/sauron \
 ```
 La infra embebida (TimescaleDB/Redis/MinIO) es para evaluación; en producción
 usar operadores (CloudNativePG, etc.) vía valores.
+
+## ONVIF (descubrimiento de cámaras)
+
+```bash
+pip install -e "inference[onvif]"
+python inference/tools/onvif_discover.py --user admin --password secret
+# imprime un bloque streams: listo para pipeline.yaml
+```
+
+## CI/CD
+
+`.github/workflows/ci.yml`: pytest+ruff+mypy (inference, api), vitest+build
+(web), helm lint, y build/push de imágenes a GHCR (`ghcr.io/<owner>/sauron-*`)
+en push a main/tags. Imágenes api/web multi-arch (amd64+arm64); inference amd64.
 
 ## White-label
 

@@ -18,7 +18,7 @@ class CongestionRule(Rule):
         self._polygon = np.array(cfg.points, dtype=np.float32)
         self._area = polygon_area(self._polygon)
         self._above_since: float | None = None
-        self._last_alert: float = 0.0
+        self._last_alert: float = float("-inf")
 
     def occupancy(self, tracks: list[TrackedObject]) -> float:
         if self._area <= 0:

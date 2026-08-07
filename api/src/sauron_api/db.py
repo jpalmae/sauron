@@ -38,14 +38,20 @@ async def get_session() -> AsyncIterator[AsyncSession]:
 
 
 async def init_db() -> None:
-    """Idempotent bootstrap. Alembic owns real migrations; this keeps dev/tests simple."""
+    """Idempotent bootstrap.
+
+    PostgreSQL: schema is owned by Alembic (`alembic upgrade head` runs at
+    container start); here we only ensure TimescaleDB hypertables exist.
+    SQLite (tests/dev): plain create_all.
+    """
     engine = get_engine()
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
         if conn.dialect.name == "postgresql":
             for stmt in HYPERTABLE_DDL.strip().split(";"):
                 if stmt.strip():
                     await conn.execute(text(stmt))
+        else:
+            await conn.run_sync(Base.metadata.create_all)
 
 
 async def close_db() -> None:
