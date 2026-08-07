@@ -14,6 +14,7 @@ from ..detection.base import Detector
 from ..detection.mock import MockDetector
 from ..detection.openai_compat import OpenAICompatDetector
 from ..detection.tensorrt_yolo import TensorRTYolo
+from ..metrics import StreamMetrics
 from ..rules.engine import RulesEngine
 from ..rules.events import Event
 from ..tracking.bytetrack import BYTETracker
@@ -80,6 +81,7 @@ class PipelineManager:
         self._detector_factory = detector_factory
         self._source_factory = source_factory
         self.pipelines: list[StreamPipeline] = []
+        self.metrics = StreamMetrics()
 
     def _build_event_sink(self) -> EventCallback | None:
         sinks: list[EventCallback] = []
@@ -137,6 +139,7 @@ class PipelineManager:
                     on_event=self.on_event,
                     clip_buffer=clip_buffer,
                     queue_size=self.cfg.defaults.capture.queue_size,
+                    metrics=self.metrics,
                 )
             )
             log.info("stream %s assigned to GPU %d", stream.id, device_id)
@@ -158,6 +161,10 @@ class PipelineManager:
         try:
             while True:
                 time.sleep(10)
+                for p in self.pipelines:
+                    self.metrics.sync_counters(
+                        p.source.camera_id, p.frames_captured, p.frames_dropped
+                    )
                 dead = [p.source.camera_id for p in self.pipelines if not p.alive]
                 if dead:
                     log.warning("dead pipelines: %s", dead)

@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sauron-api
+spec:
+  replicas: {{ .Values.api.replicas }}
+  selector:
+    matchLabels: { app: sauron-api }
+  template:
+    metadata:
+      labels: { app: sauron-api }
+    spec:
+      containers:
+        - name: api
+          image: {{ include "sauron.image" (dict "Values" .Values "repository" .Values.api.image) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: 8000
+          env:
+            - name: SAURON_DATABASE_URL
+              value: {{ .Values.database.url | quote }}
+            - name: SAURON_REDIS_URL
+              value: {{ .Values.redis.url | quote }}
+            - name: SAURON_S3_ENDPOINT
+              value: {{ .Values.s3.endpoint | quote }}
+            - name: SAURON_S3_ACCESS_KEY
+              value: {{ .Values.s3.accessKey | quote }}
+            - name: SAURON_S3_SECRET_KEY
+              value: {{ .Values.s3.secretKey | quote }}
+            - name: SAURON_S3_BUCKET
+              value: {{ .Values.s3.bucket | quote }}
+            - name: SAURON_BRANDING_APP_NAME
+              value: {{ .Values.branding.appName | quote }}
+            - name: SAURON_BRANDING_COMPANY_NAME
+              value: {{ .Values.branding.companyName | quote }}
+            - name: SAURON_BRANDING_PRIMARY_COLOR
+              value: {{ .Values.branding.primaryColor | quote }}
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8000 }
+          livenessProbe:
+            httpGet: { path: /healthz, port: 8000 }
+          resources:
+            requests: { cpu: 250m, memory: 512Mi }
+            limits: { cpu: "2", memory: 2Gi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sauron-api
+spec:
+  selector: { app: sauron-api }
+  ports:
+    - port: 8000
+      targetPort: 8000

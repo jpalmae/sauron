@@ -1,0 +1,81 @@
+{{- if .Values.inference.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sauron-pipeline
+data:
+  pipeline.yaml: |
+{{ .Values.inference.config | indent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sauron-inference
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: sauron-inference }
+  template:
+    metadata:
+      labels: { app: sauron-inference }
+    spec:
+      nodeSelector:
+{{ toYaml .Values.inference.nodeSelector | indent 8 }}
+      containers:
+        - name: inference
+          image: {{ include "sauron.image" (dict "Values" .Values "repository" .Values.inference.image) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["run", "-c", "configs/pipeline.yaml"]
+          ports:
+            - containerPort: {{ .Values.inference.metricsPort }}
+          env:
+            - name: SAURON_REDIS_URL
+              value: {{ .Values.redis.url | quote }}
+            - name: SAURON_LOG_FORMAT
+              value: json
+          volumeMounts:
+            - name: pipeline-config
+              mountPath: /app/configs
+              readOnly: true
+            - name: models
+              mountPath: /app/models
+              readOnly: true
+          readinessProbe:
+            httpGet: { path: /healthz, port: {{ .Values.inference.metricsPort }} }
+          resources:
+            limits:
+              nvidia.com/gpu: {{ .Values.inference.gpus }}
+              memory: 16Gi
+            requests:
+              cpu: "4"
+              memory: 8Gi
+      volumes:
+        - name: pipeline-config
+          configMap: { name: sauron-pipeline }
+        - name: models
+          persistentVolumeClaim:
+            claimName: sauron-models
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: sauron-models
+spec:
+  accessModes: [ReadWriteOnce]
+  {{- if .Values.persistence.storageClass }}
+  storageClassName: {{ .Values.persistence.storageClass }}
+  {{- end }}
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sauron-inference
+spec:
+  selector: { app: sauron-inference }
+  ports:
+    - port: {{ .Values.inference.metricsPort }}
+      targetPort: {{ .Values.inference.metricsPort }}
+{{- end }}

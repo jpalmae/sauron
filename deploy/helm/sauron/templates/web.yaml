@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sauron-web
+spec:
+  replicas: {{ .Values.web.replicas }}
+  selector:
+    matchLabels: { app: sauron-web }
+  template:
+    metadata:
+      labels: { app: sauron-web }
+    spec:
+      containers:
+        - name: web
+          image: {{ include "sauron.image" (dict "Values" .Values "repository" .Values.web.image) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: 80
+          readinessProbe:
+            httpGet: { path: /, port: 80 }
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { cpu: 500m, memory: 256Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sauron-web
+spec:
+  selector: { app: sauron-web }
+  ports:
+    - port: 80
+      targetPort: 80
+{{- if .Values.branding.domain }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: sauron-web
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: [{{ .Values.branding.domain | quote }}]
+      secretName: sauron-tls
+  rules:
+    - host: {{ .Values.branding.domain | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: sauron-web
+                port: { number: 80 }
+{{- end }}

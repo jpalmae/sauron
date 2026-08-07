@@ -25,6 +25,13 @@ services:
     volumes:
       - ./inference/configs:/app/configs:ro
       - models:/app/models:ro
+    ports:
+      - "9100:9100" # prometheus metrics + healthz
+    healthcheck:
+      test: ["CMD", "/opt/venv/bin/python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:9100/healthz')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
     depends_on:
       redis:
         condition: service_healthy
@@ -82,6 +89,18 @@ services:
     ports:
       - "8889:8889" # WebRTC/WHEP
       - "8554:8554" # RTSP
+
+  # Optional metrics stack. Enable with:
+  #   docker compose --profile observability up -d prometheus
+  prometheus:
+    image: prom/prometheus:latest
+    profiles: ["observability"]
+    restart: unless-stopped
+    volumes:
+      - ./deploy/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
 
   timescaledb:
     image: timescale/timescaledb-ha:pg16
@@ -154,3 +173,4 @@ volumes:
   redis-data:
   minio-data:
   models:
+  prometheus-data:

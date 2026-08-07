@@ -5,6 +5,7 @@ import json
 import logging
 
 from .ingest import ingest_event
+from .metrics import metrics
 from .schemas import EventIngest
 
 log = logging.getLogger(__name__)
@@ -40,6 +41,8 @@ async def run_consumer(app) -> None:
                     continue
                 async with get_session_factory()() as session:
                     row = await ingest_event(session, get_storage(), payload)
+                metrics.events_ingested += 1
+                metrics.ws_broadcasts += 1
                 await manager.broadcast(
                     {
                         "event_id": str(row.event_id),

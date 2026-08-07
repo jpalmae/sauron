@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .config import get_settings
 from .consumer import run_consumer
 from .db import close_db, init_db
+from .metrics import MetricsMiddleware
 from .routers import branding, cameras, events, kpis, reports
 from .ws import router as ws_router
 
@@ -37,6 +38,7 @@ async def lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(title="Sauron API", version="0.1.0", lifespan=lifespan)
+    app.add_middleware(MetricsMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,

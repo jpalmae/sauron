@@ -1,0 +1,57 @@
+# Sauron Helm values — rebrand and resize without touching templates.
+image:
+  registry: ""            # e.g. registry.cliente.com/sauron
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+branding:
+  appName: Sauron
+  companyName: ""
+  primaryColor: "#0E7C66"
+  domain: ""              # e.g. vision.cliente.com — enables Ingress + TLS
+
+# Sizing profile: xs (1 GPU / 20 streams), s (2 / 40), m (3 / 60)
+profile: xs
+
+inference:
+  enabled: true
+  gpus: 1                 # NVIDIA L4 devices (nvidia.com/gpu)
+  image: sauron/inference
+  metricsPort: 9100
+  nodeSelector: {}        # e.g. { hpe.com/gpu: "l4" }
+  config: |
+    app:
+      name: sauron
+      redis_url: "redis://sauron-redis:6379/0"
+    devices: [0]
+    defaults:
+      engine_path: models/yolov8n_fp16.engine
+      confidence_threshold: 0.50
+      clips:
+        enabled: true
+        preroll_seconds: 8
+    streams: []
+
+api:
+  replicas: 1
+  image: sauron/api
+
+web:
+  replicas: 1
+  image: sauron/web
+
+# Bundled infra is for evaluation. In production point these at managed
+# services / operators (CloudNativePG, Redis operator, MinIO operator).
+database:
+  url: postgresql+asyncpg://sauron:changeme@sauron-timescaledb:5432/sauron
+redis:
+  url: redis://sauron-redis:6379/0
+s3:
+  endpoint: sauron-minio:9000
+  bucket: sauron-events
+  accessKey: sauron
+  secretKey: changeme
+
+persistence:
+  storageClass: ""        # cluster default
+  size: 20Gi

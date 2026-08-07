@@ -8,6 +8,7 @@ from collections.abc import Callable
 
 from ..capture.base import FrameSource
 from ..detection.base import Detector
+from ..metrics import StreamMetrics
 from ..rules.engine import RulesEngine
 from ..rules.events import Event
 from ..tracking.bytetrack import BYTETracker, STrack
@@ -55,6 +56,7 @@ class StreamPipeline:
         on_event: EventCallback | None = None,
         clip_buffer: ClipBuffer | None = None,
         queue_size: int = 2,
+        metrics: StreamMetrics | None = None,
     ) -> None:
         self.source = source
         self.detector = detector
@@ -63,6 +65,7 @@ class StreamPipeline:
         self.rules_engine = rules_engine
         self.on_event = on_event
         self.clip_buffer = clip_buffer
+        self._metrics = metrics
         self._queue: queue.Queue[Frame] = queue.Queue(maxsize=max(queue_size, 1))
         self._stop = threading.Event()
         self._capture_thread = threading.Thread(
@@ -106,6 +109,8 @@ class StreamPipeline:
                 tracks = self.tracker.update(detections)
                 tracked = [to_tracked_object(t, frame) for t in tracks]
                 self.frames_processed += 1
+                if self._metrics is not None:
+                    self._metrics.record_processed(frame.camera_id, frame, tracked)
                 if self.clip_buffer is not None:
                     self.clip_buffer.add(frame)
                 if self.rules_engine is not None:
@@ -118,6 +123,8 @@ class StreamPipeline:
                         log.info(
                             "[%s] %s %s", frame.camera_id, event.priority, event.event_type
                         )
+                        if self._metrics is not None:
+                            self._metrics.record_event(frame.camera_id)
                         if self.on_event is not None:
                             self.on_event(event)
                 if self.on_tracks is not None:

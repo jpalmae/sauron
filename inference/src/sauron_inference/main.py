@@ -2,27 +2,33 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
 import time
 
 from .config import load_config
+from .logging_setup import setup_logging
+from .metrics import start_metrics_server
 from .pipeline.manager import PipelineManager
 
 log = logging.getLogger("sauron")
 
 
 def _setup_logging(verbose: bool) -> None:
-    logging.basicConfig(
-        level=logging.DEBUG if verbose else logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
+    setup_logging(verbose=verbose, json_format=os.environ.get("SAURON_LOG_FORMAT") == "json")
 
 
 def cmd_run(args: argparse.Namespace) -> int:
     cfg = load_config(args.config)
     log.info("loaded config: %d streams, devices=%s", len(cfg.streams), cfg.devices)
     manager = PipelineManager(cfg)
-    manager.run_forever()
+    metrics_port = int(os.environ.get("SAURON_METRICS_PORT", "9100"))
+    server = start_metrics_server(manager.metrics, port=metrics_port)
+    log.info("metrics on :%d (/metrics, /healthz)", metrics_port)
+    try:
+        manager.run_forever()
+    finally:
+        server.shutdown()
     return 0
 
 
