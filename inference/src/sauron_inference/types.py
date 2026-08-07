@@ -21,6 +21,7 @@ class Detection:
     score: float
     class_id: int
     class_name: str
+    keypoints: np.ndarray | None = None  # [17, 3] (x, y, conf) for pose backends
 
 
 @dataclass(slots=True)
@@ -37,6 +38,7 @@ class TrackedObject:
     frame_seq: int
     timestamp: float
     speed_kmh: float | None = None
+    keypoints: np.ndarray | None = None  # [17, 3] (x, y, conf) for pose backends
 
     def to_dict(self) -> dict[str, Any]:
         return {

@@ -18,10 +18,36 @@ def _setup_logging(verbose: bool) -> None:
     setup_logging(verbose=verbose, json_format=os.environ.get("SAURON_LOG_FORMAT") == "json")
 
 
+def _build_camera_source(cfg):
+    """GUI-driven cameras: if SAURON_API_URL is set, streams come from the API."""
+    api_url = os.environ.get("SAURON_API_URL", "").strip()
+    if not api_url:
+        return None
+    from .camera_sync import APICameraSource
+
+    ingest_token = os.environ.get("SAURON_INGEST_TOKEN", "").strip() or None
+    fps = int(os.environ.get("SAURON_API_CAMERAS_FPS", "5"))
+    interval = float(os.environ.get("SAURON_API_CAMERAS_POLL_S", "20"))
+    log.info(
+        "API camera source enabled: %s (poll every %ss, target_fps=%d)",
+        api_url,
+        interval,
+        fps,
+    )
+    return APICameraSource(
+        base_url=api_url,
+        ingest_token=ingest_token,
+        defaults=cfg.defaults,
+        target_fps=fps,
+        poll_interval=interval,
+    )
+
+
 def cmd_run(args: argparse.Namespace) -> int:
     cfg = load_config(args.config)
     log.info("loaded config: %d streams, devices=%s", len(cfg.streams), cfg.devices)
-    manager = PipelineManager(cfg)
+    camera_source = _build_camera_source(cfg)
+    manager = PipelineManager(cfg, camera_source=camera_source)
     metrics_port = int(os.environ.get("SAURON_METRICS_PORT", "9100"))
     server = start_metrics_server(manager.metrics, port=metrics_port)
     log.info("metrics on :%d (/metrics, /healthz)", metrics_port)

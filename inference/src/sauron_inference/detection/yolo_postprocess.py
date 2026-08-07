@@ -93,3 +93,47 @@ def postprocess_yolo(
             Detection(bbox=box.astype(np.float32), score=float(score), class_id=cls, class_name=classes[cls])
         )
     return detections
+
+
+def postprocess_yolo_pose(
+    output: np.ndarray,
+    orig_shape: tuple[int, int],
+    scale: float,
+    pad: tuple[float, float],
+    conf_threshold: float,
+    nms_threshold: float,
+) -> list[tuple[np.ndarray, float, np.ndarray]]:
+    """YOLOv8-pose output [1, 56, N] -> [(bbox_xyxy, score, keypoints[17,3]), ...].
+
+    Layout per anchor: [cx, cy, w, h, conf, kx0, ky0, kc0, ... x17].
+    Coordinates are mapped back to the original image space.
+    """
+    preds = output[0].T  # [N, 56]
+    boxes = xywh_to_xyxy(preds[:, :4].astype(np.float32))
+    scores = preds[:, 4]
+    kpts = preds[:, 5:].reshape(-1, 17, 3).astype(np.float32)
+
+    keep = scores >= conf_threshold
+    boxes, scores, kpts = boxes[keep], scores[keep], kpts[keep]
+    if len(boxes) == 0:
+        return []
+
+    indices = cv2.dnn.NMSBoxes(
+        bboxes=boxes.tolist(),
+        scores=scores.tolist(),
+        score_threshold=conf_threshold,
+        nms_threshold=nms_threshold,
+    )
+    if len(indices) == 0:
+        return []
+    idx = np.asarray(indices).flatten()
+
+    boxes = scale_boxes(boxes[idx], scale, pad, orig_shape)
+    kpts = kpts[idx].copy()
+    kpts[:, :, 0] = (kpts[:, :, 0] - pad[0]) / scale
+    kpts[:, :, 1] = (kpts[:, :, 1] - pad[1]) / scale
+
+    return [
+        (boxes[i].astype(np.float32), float(scores[i]), kpts[i].astype(np.float32))
+        for i in range(len(idx))
+    ]

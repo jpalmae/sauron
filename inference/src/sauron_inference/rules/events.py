@@ -14,6 +14,10 @@ class EventType(StrEnum):
     OBSTRUCTION = "OBSTRUCTION"
     WRONG_WAY = "WRONG_WAY"
     CONGESTION = "CONGESTION"
+    OCCUPANCY = "OCCUPANCY"
+    GROUPING = "GROUPING"
+    FALL = "FALL"
+    CHAIR_OCCUPANCY = "CHAIR_OCCUPANCY"
 
 
 class Priority(StrEnum):

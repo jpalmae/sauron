@@ -1,5 +1,7 @@
-# Local demo config: live public camera (Shinjuku, Tokio) with real ONNX CPU
-# detection. Events flow to Redis -> API -> dashboard. No GPU needed.
+# Config del pipeline para cmadridasus (CPU, GUI-driven).
+# Las camaras se cargan desde la API (GET /cameras/active); este YAML solo
+# aporta los DEFAULTS: detector multi-modelo (pose + objetos) para analitica
+# completa de personas: ocupacion + postura + caidas + sillas + ReID.
 app:
   name: sauron
   redis_url: "redis://redis:6379/0"
@@ -7,86 +9,27 @@ app:
 devices: [0]
 
 defaults:
-  confidence_threshold: 0.35
+  confidence_threshold: 0.40
+  nms_threshold: 0.45
+  input_size: [640, 640]
   detector:
-    backend: mock
+    backend: pose_objects        # YOLOv8n-pose (personas+keypoints) + YOLOv8n (sillas)
+  onnx_path: models/yolov8n-pose.onnx
+  objects_onnx_path: models/yolov8n.onnx
+  classes:
+    0: person
   tracker:
-    high_thresh: 0.35
+    high_thresh: 0.40
     low_thresh: 0.10
+    match_thresh: 0.80
     max_time_lost: 30
+    history_size: 60
   capture:
     queue_size: 2
-    use_gstreamer: false   # CPU demo: FFmpeg decode (también lee HLS/m3u8)
+    use_gstreamer: false
   clips:
     enabled: true
     preroll_seconds: 6
     clip_fps: 10
 
-streams:
-  # Cámaras públicas en vivo (YouTube Live). El prefijo yt: resuelve y
-  # refresca el manifiesto HLS automáticamente (yt-dlp).
-  - id: shinjuku-live
-    name: "Shinjuku Live (Tokio)"
-    type: rtsp
-    source: "yt:https://www.youtube.com/watch?v=gFRtAAmiFbE"
-    target_fps: 5
-    detector:
-      backend: onnx     # CPU real: yolov8n.onnx via OpenCV DNN
-    roi:
-      lines:
-        - id: L1
-          points: [[60, 520], [1000, 520]]
-      polygons:
-        - id: calzada
-          kind: lane
-          points: [[60, 380], [1000, 380], [1100, 710], [40, 710]]
-          rules: [stopped, congestion]
-      thresholds:
-        stopped_seconds: 10
-        congestion_occupancy: 0.25
-        congestion_seconds: 20
-        congestion_cooldown_s: 60
-
-  - id: ih35-aquarena
-    name: "IH-35 @ Aquarena Springs (Texas)"
-    type: rtsp
-    source: "yt:https://www.youtube.com/watch?v=eHY0dJK7giA"
-    target_fps: 5
-    detector:
-      backend: onnx
-    roi:
-      lines:
-        - id: L1
-          points: [[300, 450], [950, 450]]
-      polygons:
-        - id: freeway
-          kind: lane
-          points: [[300, 150], [950, 150], [1000, 700], [250, 700]]
-          rules: [stopped, congestion]
-      thresholds:
-        stopped_seconds: 12
-        congestion_occupancy: 0.30
-        congestion_seconds: 30
-        congestion_cooldown_s: 120
-
-  - id: grand-avenue
-    name: "Grand Avenue Bridge (Glenwood Springs)"
-    type: rtsp
-    source: "yt:https://www.youtube.com/watch?v=SNvppiU1-IM"
-    target_fps: 5
-    detector:
-      backend: onnx
-    roi:
-      lines:
-        - id: L1
-          points: [[0, 550], [1280, 550]]
-      polygons:
-        - id: street
-          kind: lane
-          points: [[0, 400], [1280, 400], [1280, 700], [0, 700]]
-          rules: [stopped, congestion]
-      thresholds:
-        stopped_seconds: 12
-        congestion_occupancy: 0.30
-        congestion_seconds: 30
-        congestion_cooldown_s: 120
+streams: []

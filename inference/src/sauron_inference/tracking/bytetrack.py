@@ -73,6 +73,7 @@ class STrack:
         self.start_frame = 0
         self.tracklet_len = 0
         self.history: deque[tuple[float, float]] = deque(maxlen=STrack.history_maxlen)
+        self.keypoints = None  # latest pose keypoints (pose backends)
 
     @staticmethod
     def tlwh_to_xyxy(tlwh: np.ndarray) -> np.ndarray:
@@ -122,6 +123,7 @@ class STrack:
         self.frame_id = frame_id
         self.tracklet_len += 1
         self.history.append(self.centroid)
+        self.keypoints = det.keypoints
 
     def mark_lost(self) -> None:
         self.state = TrackState.LOST
@@ -228,7 +230,9 @@ class BYTETracker:
 
     @staticmethod
     def _to_strack(d: Detection) -> STrack:
-        return STrack(xyxy_to_tlwh(d.bbox), d.score, d.class_id, d.class_name)
+        s = STrack(xyxy_to_tlwh(d.bbox), d.score, d.class_id, d.class_name)
+        s.keypoints = getattr(d, "keypoints", None)
+        return s
 
     def _match(
         self,

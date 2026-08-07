@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import os
 import time
@@ -13,6 +15,8 @@ from ..config import PipelineConfig, StreamConfig
 from ..detection.base import Detector
 from ..detection.mock import MockDetector
 from ..detection.onnx_dnn import OnnxDnnDetector
+from ..detection.multi import MultiDetector
+from ..detection.pose import OnnxPoseDetector
 from ..detection.openai_compat import OpenAICompatDetector
 from ..detection.tensorrt_yolo import TensorRTYolo
 from ..metrics import StreamMetrics
@@ -58,6 +62,23 @@ def build_detector(stream: StreamConfig, cfg: PipelineConfig, device_id: int) ->
             nms_threshold=cfg.defaults.nms_threshold,
             classes=cfg.defaults.classes,
         )
+    if det_cfg.backend == "pose":
+        return OnnxPoseDetector(
+            onnx_path=stream.resolved_onnx(cfg.defaults),
+            input_size=cfg.defaults.input_size,
+            conf_threshold=conf,
+            nms_threshold=cfg.defaults.nms_threshold,
+            classes=cfg.defaults.classes,
+        )
+    if det_cfg.backend == "pose_objects":
+        return MultiDetector(
+            pose_path=stream.resolved_onnx(cfg.defaults),
+            objects_path=stream.resolved_objects_onnx(cfg.defaults),
+            input_size=cfg.defaults.input_size,
+            conf_threshold=conf,
+            nms_threshold=cfg.defaults.nms_threshold,
+            pose_classes=cfg.defaults.classes,
+        )
     if det_cfg.backend == "openai":
         return OpenAICompatDetector(
             det_cfg.openai, classes=cfg.defaults.classes, conf_threshold=conf
@@ -73,7 +94,14 @@ def build_detector(stream: StreamConfig, cfg: PipelineConfig, device_id: int) ->
 
 
 class PipelineManager:
-    """Builds and supervises one StreamPipeline per configured stream."""
+    """Builds and supervises one StreamPipeline per configured stream.
+
+    Two camera sources are supported:
+      * static YAML streams (default), and
+      * dynamic cameras pulled from the Sauron API via ``camera_source`` —
+        enables 100% GUI-driven camera management (add/edit/remove in the
+        dashboard; the engine reconciles within the poll interval).
+    """
 
     def __init__(
         self,
@@ -82,6 +110,7 @@ class PipelineManager:
         on_event: EventCallback | None = None,
         detector_factory=build_detector,
         source_factory=build_source,
+        camera_source=None,
     ) -> None:
         self.cfg = cfg
         self.on_tracks = on_tracks or NullCallback()
@@ -91,6 +120,9 @@ class PipelineManager:
         self._source_factory = source_factory
         self.pipelines: list[StreamPipeline] = []
         self.metrics = StreamMetrics()
+        self.camera_source = camera_source
+        self._stream_hashes: dict[str, str] = {}
+        self._last_sync = -1.0
 
     def _build_event_sink(self) -> EventCallback | None:
         sinks: list[EventCallback] = []
@@ -116,45 +148,99 @@ class PipelineManager:
 
         return emit
 
+    @staticmethod
+    def _hash(stream: StreamConfig) -> str:
+        payload = {
+            "type": stream.type,
+            "source": stream.source,
+            "target_fps": stream.target_fps,
+            "detector": stream.detector.model_dump(mode="json") if stream.detector else None,
+            "roi": stream.roi.model_dump(mode="json") if stream.roi else None,
+        }
+        return hashlib.sha1(json.dumps(payload, sort_keys=True).encode()).hexdigest()
+
+    def _build_one(self, stream: StreamConfig, index: int) -> StreamPipeline:
+        device_id = self.cfg.device_for(index, stream)
+        source = self._source_factory(stream, self.cfg)
+        detector = self._detector_factory(stream, self.cfg, device_id)
+        tracker = BYTETracker(self.cfg.defaults.tracker, frame_rate=stream.target_fps)
+        engine = (
+            RulesEngine(stream.id, stream.roi, fps=stream.target_fps)
+            if stream.roi
+            else None
+        )
+        clip_cfg = self.cfg.defaults.clips
+        clip_buffer = (
+            ClipBuffer(
+                preroll_seconds=clip_cfg.preroll_seconds,
+                fps=stream.target_fps,
+                jpeg_quality=clip_cfg.jpeg_quality,
+                clip_fps=clip_cfg.clip_fps,
+            )
+            if clip_cfg.enabled
+            else None
+        )
+        log.info("stream %s assigned to GPU %d", stream.id, device_id)
+        return StreamPipeline(
+            source=source,
+            detector=detector,
+            tracker=tracker,
+            on_tracks=self.on_tracks,
+            rules_engine=engine,
+            on_event=self.on_event,
+            clip_buffer=clip_buffer,
+            queue_size=self.cfg.defaults.capture.queue_size,
+            metrics=self.metrics,
+        )
+
+    def _start_one(self, stream: StreamConfig) -> None:
+        try:
+            pipeline = self._build_one(stream, len(self.pipelines))
+            pipeline.start()
+            self.pipelines.append(pipeline)
+            self._stream_hashes[stream.id] = self._hash(stream)
+            log.info("stream %s started (source=%s)", stream.id, stream.source)
+        except Exception:
+            log.exception("error starting stream %s", stream.id)
+
     def build(self) -> None:
         for i, stream in enumerate(self.cfg.streams):
-            device_id = self.cfg.device_for(i, stream)
-            source = self._source_factory(stream, self.cfg)
-            detector = self._detector_factory(stream, self.cfg, device_id)
-            tracker = BYTETracker(self.cfg.defaults.tracker, frame_rate=stream.target_fps)
-            engine = (
-                RulesEngine(stream.id, stream.roi, fps=stream.target_fps)
-                if stream.roi
-                else None
-            )
-            clip_cfg = self.cfg.defaults.clips
-            clip_buffer = (
-                ClipBuffer(
-                    preroll_seconds=clip_cfg.preroll_seconds,
-                    fps=stream.target_fps,
-                    jpeg_quality=clip_cfg.jpeg_quality,
-                    clip_fps=clip_cfg.clip_fps,
-                )
-                if clip_cfg.enabled
-                else None
-            )
-            self.pipelines.append(
-                StreamPipeline(
-                    source=source,
-                    detector=detector,
-                    tracker=tracker,
-                    on_tracks=self.on_tracks,
-                    rules_engine=engine,
-                    on_event=self.on_event,
-                    clip_buffer=clip_buffer,
-                    queue_size=self.cfg.defaults.capture.queue_size,
-                    metrics=self.metrics,
-                )
-            )
-            log.info("stream %s assigned to GPU %d", stream.id, device_id)
+            pipeline = self._build_one(stream, i)
+            self.pipelines.append(pipeline)
+            self._stream_hashes[stream.id] = self._hash(stream)
+
+    def reconcile(self, desired: list[StreamConfig]) -> None:
+        """Add/remove/restart streams so the running set matches ``desired``."""
+        desired_ids = {s.id for s in desired}
+        desired_hashes = {s.id: self._hash(s) for s in desired}
+
+        to_stop = [
+            p
+            for p in self.pipelines
+            if p.source.camera_id not in desired_ids
+            or desired_hashes.get(p.source.camera_id)
+            != self._stream_hashes.get(p.source.camera_id)
+        ]
+        for p in to_stop:
+            try:
+                p.stop()
+            except Exception:
+                log.exception("error stopping stream %s", p.source.camera_id)
+            log.info("stream %s stopped", p.source.camera_id)
+        if to_stop:
+            stopped = {p.source.camera_id for p in to_stop}
+            self.pipelines = [p for p in self.pipelines if p.source.camera_id not in stopped]
+            for cid in stopped:
+                self._stream_hashes.pop(cid, None)
+
+        running_ids = {p.source.camera_id for p in self.pipelines}
+        for s in desired:
+            if s.id not in running_ids:
+                self._start_one(s)
 
     def start(self) -> None:
-        if not self.pipelines:
+        # In API (GUI-driven) mode the camera list comes from reconcile().
+        if not self.camera_source and not self.pipelines:
             self.build()
         for p in self.pipelines:
             p.start()
@@ -165,11 +251,26 @@ class PipelineManager:
             p.stop()
         log.info("all pipelines stopped")
 
+    def _sync_cameras(self) -> None:
+        self._last_sync = time.monotonic()
+        try:
+            desired = self.camera_source.fetch_streams()
+            log.debug("camera source returned %d streams", len(desired))
+            self.reconcile(desired)
+        except Exception:
+            log.exception("camera sync failed")
+
     def run_forever(self) -> None:
         self.start()
+        if self.camera_source is not None:
+            self._sync_cameras()
         try:
             while True:
-                time.sleep(10)
+                time.sleep(5)
+                if self.camera_source is not None:
+                    interval = getattr(self.camera_source, "poll_interval", 20.0)
+                    if time.monotonic() - self._last_sync >= interval:
+                        self._sync_cameras()
                 for p in self.pipelines:
                     self.metrics.sync_counters(
                         p.source.camera_id, p.frames_captured, p.frames_dropped
@@ -181,3 +282,8 @@ class PipelineManager:
             log.info("shutting down")
         finally:
             self.stop()
+            if self.camera_source is not None:
+                try:
+                    self.camera_source.close()
+                except Exception:
+                    pass

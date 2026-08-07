@@ -35,6 +35,7 @@ def to_tracked_object(track: STrack, frame: Frame) -> TrackedObject:
         track_history=list(track.history),
         frame_seq=frame.seq,
         timestamp=frame.timestamp,
+        keypoints=getattr(track, "keypoints", None),
     )
 
 

@@ -9,6 +9,9 @@ from .base import Rule, RuleContext
 from .congestion import CongestionRule
 from .events import Event
 from .line_crossing import LineCrossingRule
+from .chair_occupancy import ChairOccupancyRule
+from .grouping import GroupingRule
+from .occupancy import OccupancyRule
 from .speed import SpeedEstimator
 from .stopped_vehicle import StoppedVehicleRule
 from .wrong_way import WrongWayRule
@@ -19,6 +22,9 @@ _POLYGON_RULES: dict[PolygonRuleName, Callable[[PolygonConfig], Rule]] = {
     "stopped": StoppedVehicleRule,
     "wrong_way": WrongWayRule,
     "congestion": CongestionRule,
+    "occupancy": OccupancyRule,
+    "grouping": GroupingRule,
+    "chair_occupancy": ChairOccupancyRule,
 }
 
 
