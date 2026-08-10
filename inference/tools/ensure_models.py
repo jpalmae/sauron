@@ -46,7 +46,15 @@ def copy_baked(models_dir: Path) -> None:
 
 
 def ensure_engines(models_dir: Path, names: set[str], int8: bool, calib_data: str | None) -> None:
-    from tools.build_engine import build_engine  # type: ignore[import-not-found]
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "build_engine", Path(__file__).with_name("build_engine.py")
+    )
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)  # type: ignore[union-attr]
+    build_engine = mod.build_engine  # type: ignore[attr-defined]
 
     for name in sorted(names):
         info = CATALOG[name]
