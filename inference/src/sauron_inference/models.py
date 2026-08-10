@@ -19,6 +19,7 @@ CATALOG: dict[str, ModelInfo] = {
     "yolov8m": ModelInfo("yolov8m", "yolov8", "yolov8m.onnx", "yolov8m_fp16.engine", "S/M", 104),
     "yolo11n": ModelInfo("yolo11n", "yolo11", "yolo11n.onnx", "yolo11n_fp16.engine", "XS", 11),
     "yolo11s": ModelInfo("yolo11s", "yolo11", "yolo11s.onnx", "yolo11s_fp16.engine", "XS/S", 38),
+    "yolov8n-pose": ModelInfo("yolov8n-pose", "yolov8-pose", "yolov8n-pose.onnx", "yolov8n-pose_fp16.engine", "XS", 13),
 }
 
 DEFAULT_MODEL = "yolov8n"

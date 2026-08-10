@@ -24,7 +24,21 @@ BAKED_DIR = Path("/app/models-baked")
 
 def models_in_use(config_path: str) -> set[str]:
     cfg = load_config(config_path)
-    return {s.resolved_model(cfg.defaults) for s in cfg.streams} or {cfg.defaults.model}
+    names = {s.resolved_model(cfg.defaults) for s in cfg.streams} or {cfg.defaults.model}
+    # also need pose models for streams that use pose backends
+    for s in cfg.streams:
+        det = s.resolved_detector(cfg.defaults)
+        if det.backend in ("pose", "pose_objects"):
+            # pose_onnx_path is like models/yolov8n-pose.onnx -> catalog name yolov8n-pose
+            pose_name = Path(s.resolved_pose_onnx(cfg.defaults)).stem
+            if pose_name in CATALOG:
+                names.add(pose_name)
+    # default pose model if any stream uses pose
+    if any(s.resolved_detector(cfg.defaults).backend in ("pose", "pose_objects") for s in cfg.streams) or cfg.defaults.detector.backend in ("pose", "pose_objects"):
+        pose_default = Path(cfg.defaults.pose_onnx_path).stem
+        if pose_default in CATALOG:
+            names.add(pose_default)
+    return names
 
 
 def copy_baked(models_dir: Path) -> None:

@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import time
+from pathlib import Path
 
 from ..bridge.http_publisher import HTTPEventPublisher
 from ..bridge.redis_publisher import RedisEventPublisher
@@ -65,17 +66,76 @@ def build_detector(stream: StreamConfig, cfg: PipelineConfig, device_id: int) ->
             classes=cfg.defaults.classes,
         )
     if det_cfg.backend == "pose":
+        pose_onnx = stream.resolved_pose_onnx(cfg.defaults)
+        # Prefer TensorRT engine when available (GPU), fallback to ONNX CPU
+        from pathlib import Path as _Path
+
+        pose_engine = str(_Path(pose_onnx).with_suffix("")) + "_fp16.engine"
+        pose_engine = pose_engine.replace(".onnx_fp16", "_fp16").replace(".onnx", "_fp16.engine")
+        # canonical: yolov8n-pose.onnx -> yolov8n-pose_fp16.engine
+        pose_engine = str(_Path(pose_onnx).parent / (_Path(pose_onnx).stem + "_fp16.engine"))
+        if _Path(pose_engine).exists():
+            from ..detection.tensorrt_pose import TensorRTPose
+
+            return TensorRTPose(
+                pose_engine,
+                input_size=cfg.defaults.input_size,
+                conf_threshold=conf,
+                nms_threshold=cfg.defaults.nms_threshold,
+                classes=cfg.defaults.classes,
+            )
         return OnnxPoseDetector(
-            onnx_path=stream.resolved_pose_onnx(cfg.defaults),
+            onnx_path=pose_onnx,
             input_size=cfg.defaults.input_size,
             conf_threshold=conf,
             nms_threshold=cfg.defaults.nms_threshold,
             classes=cfg.defaults.classes,
         )
     if det_cfg.backend == "pose_objects":
+        pose_onnx = stream.resolved_pose_onnx(cfg.defaults)
+        pose_engine = str(Path(pose_onnx).parent / (Path(pose_onnx).stem + "_fp16.engine"))
+        objects_onnx = stream.resolved_objects_onnx(cfg.defaults)
+        # TensorRT for pose part when engine exists, ONNX for objects part is still CPU
+        # For full GPU, both would be TensorRT — objects part already via tensorrt backend is GPU
+        if Path(pose_engine).exists():
+            from ..detection.tensorrt_pose import TensorRTPose
+
+            pose_det = TensorRTPose(
+                pose_engine,
+                input_size=cfg.defaults.input_size,
+                conf_threshold=conf,
+                nms_threshold=cfg.defaults.nms_threshold,
+                classes={0: "person"},
+            )
+            # objects part as TensorRT if available, else ONNX
+            from pathlib import Path as _P2
+            from ..detection.tensorrt_yolo import TensorRTYolo as _TRTYolo
+
+            obj_engine = str(_P2(objects_onnx).parent / (_P2(objects_onnx).stem + "_fp16.engine"))
+            if _P2(obj_engine).exists():
+                obj_det: Detector = _TRTYolo(
+                    obj_engine,
+                    device_id=device_id,
+                    input_size=cfg.defaults.input_size,
+                    conf_threshold=conf,
+                    nms_threshold=cfg.defaults.nms_threshold,
+                    classes=cfg.defaults.classes,
+                )
+                # combine via MultiDetector-like wrapper that holds two TensorRT detectors
+                # reuse MultiDetector logic but with pre-built detectors
+                from ..detection.multi import SEAT_CLASSES
+
+                class _TRTMulti(Detector):
+                    def __init__(self, p, o):
+                        self.p, self.o = p, o
+
+                    def detect(self, img):
+                        return self.p.detect(img) + self.o.detect(img)
+
+                return _TRTMulti(pose_det, obj_det)
         return MultiDetector(
-            pose_path=stream.resolved_pose_onnx(cfg.defaults),
-            objects_path=stream.resolved_objects_onnx(cfg.defaults),
+            pose_path=pose_onnx,
+            objects_path=objects_onnx,
             input_size=cfg.defaults.input_size,
             conf_threshold=conf,
             nms_threshold=cfg.defaults.nms_threshold,
