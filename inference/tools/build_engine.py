@@ -30,7 +30,11 @@ def build_engine(
 
     logger = trt.Logger(trt.Logger.INFO)
     builder = trt.Builder(logger)
-    network = builder.create_network(1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH))
+    try:
+        flag = 1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH)
+    except AttributeError:
+        flag = 0  # TRT 10: explicit batch is default
+    network = builder.create_network(flag)
     parser = trt.OnnxParser(network, logger)
     if not parser.parse_from_file(str(onnx_path)):
         for i in range(parser.num_errors):
