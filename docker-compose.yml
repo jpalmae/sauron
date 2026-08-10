@@ -13,6 +13,10 @@ services:
       NVIDIA_DRIVER_CAPABILITIES: compute,video,utility
       # event sink: Redis (default) or direct API ingest — comment one out
       SAURON_REDIS_URL: redis://redis:6379/0
+      SAURON_API_URL: http://api:8000
+      SAURON_INGEST_TOKEN: ${INGEST_TOKEN}
+      SAURON_API_CAMERAS_FPS: "5"
+      SAURON_API_CAMERAS_POLL_S: "15"
       # SAURON_API_INGEST_URL: http://api:8000
       # only for detector.backend=openai:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
