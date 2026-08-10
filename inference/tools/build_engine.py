@@ -43,10 +43,19 @@ def build_engine(
 
     config = builder.create_builder_config()
     config.set_memory_pool_limit(trt.MemoryPoolType.WORKSPACE, workspace_gb << 30)
-    if fp16 and builder.platform_has_fast_fp16:
-        config.set_flag(trt.BuilderFlag.FP16)
+    if fp16:
+        try:
+            has_fp16 = builder.platform_has_fast_fp16
+        except AttributeError:
+            has_fp16 = True
+        if has_fp16:
+            config.set_flag(trt.BuilderFlag.FP16)
     if int8:
-        if not builder.platform_has_fast_int8:
+        try:
+            has_int8 = builder.platform_has_fast_int8
+        except AttributeError:
+            has_int8 = True
+        if not has_int8:
             raise SystemExit("platform has no fast INT8")
         if not calib_data:
             raise SystemExit("INT8 requires --calib-data (dir with calibration frames)")
