@@ -105,6 +105,23 @@ class SnapshotStorage:
             return None
         return await asyncio.to_thread(self._presign, key)
 
+    def _get(self, key: str) -> bytes:
+        resp = self._get_client().get_object(self._settings.s3_bucket, key)
+        try:
+            return resp.read()
+        finally:
+            resp.close()
+            resp.release_conn()
+
+    async def download_bytes(self, key: str) -> bytes | None:
+        if not self.enabled:
+            return None
+        try:
+            return await asyncio.to_thread(self._get, key)
+        except Exception:
+            log.exception("download failed for %s", key)
+            return None
+
 
 _storage: SnapshotStorage | None = None
 

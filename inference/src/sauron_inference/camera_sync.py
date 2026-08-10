@@ -4,7 +4,7 @@ import logging
 
 import httpx
 
-from .config import DefaultsConfig, ROIConfig, StreamConfig
+from .config import DefaultsConfig, DetectorConfig, ROIConfig, StreamConfig
 
 log = logging.getLogger(__name__)
 
@@ -64,6 +64,12 @@ class APICameraSource:
                     type="rtsp",
                     source=rtsp,
                     target_fps=self.target_fps,
+                    model=cam.get("model") or None,
+                    detector=(
+                        DetectorConfig(backend=cam["detector"])
+                        if cam.get("detector")
+                        else None
+                    ),
                     roi=roi,
                 )
             )

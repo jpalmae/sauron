@@ -16,6 +16,8 @@ RUN uv venv /opt/venv && uv pip install --python /opt/venv/bin/python -e .
 
 COPY api/alembic.ini ./alembic.ini
 COPY api/alembic ./alembic
+# CLIP models for semantic search (export with tools/export_clip.py)
+COPY api/models/ ./models/
 
 EXPOSE 8000
 HEALTHCHECK --interval=10s --timeout=3s --retries=5 \

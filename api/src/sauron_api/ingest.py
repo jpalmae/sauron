@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import logging
 from datetime import UTC, datetime
@@ -33,6 +34,7 @@ async def ingest_event(
     ts = datetime.fromtimestamp(payload.timestamp, tz=UTC)
 
     snapshot_key = None
+    embedding: list[float] | None = None
     if payload.snapshot_jpeg:
         try:
             jpeg = base64.b64decode(payload.snapshot_jpeg)
@@ -40,6 +42,9 @@ async def ingest_event(
             jpeg = b""
         if jpeg:
             snapshot_key = await storage.upload_snapshot(camera.id, ts, jpeg)
+            from .embeddings import get_embeddings
+
+            embedding = await asyncio.to_thread(get_embeddings().embed_image, jpeg)
 
     clip_key = None
     if payload.clip_mp4:
@@ -66,6 +71,7 @@ async def ingest_event(
         extra=payload.metadata,
         snapshot_key=snapshot_key,
         clip_key=clip_key,
+        embedding=embedding,
     )
     session.add(row)
     await session.commit()

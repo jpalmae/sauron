@@ -1,6 +1,7 @@
-import { Check, Volume2, VolumeX } from "lucide-react";
+import { Bell, BellRing, Check, Volume2, VolumeX } from "lucide-react";
 import { useState } from "react";
 import type { EventItem } from "../lib/api";
+import { subscribeToPushes, pushSupported } from "../lib/push";
 import {
   CLASS_ICONS,
   EVENT_LABELS,
@@ -85,17 +86,38 @@ export default function AlertPanel({
   onAck: (id: string) => void;
 }) {
   const [now] = useState(() => Date.now());
+  const [pushState, setPushState] = useState<"off" | "on" | "loading">("off");
   return (
     <div className="flex h-full flex-col border-l border-line bg-panel">
       <div className="flex items-center justify-between border-b border-line px-4 py-3">
         <h2 className="font-display text-sm font-semibold tracking-wide">ALERTAS</h2>
-        <button
-          onClick={onToggleSound}
-          className="rounded p-1.5 text-mut transition-colors hover:bg-raised hover:text-ink"
-          title={soundOn ? "Silenciar alertas" : "Activar sonido de alertas"}
-        >
-          {soundOn ? <Volume2 size={15} /> : <VolumeX size={15} />}
-        </button>
+        <div className="flex items-center gap-1">
+          {pushSupported() && (
+            <button
+              onClick={() => {
+                setPushState("loading");
+                void subscribeToPushes().then((s) =>
+                  setPushState(s === "subscribed" ? "on" : "off"),
+                );
+              }}
+              className="rounded p-1.5 text-mut transition-colors hover:bg-raised hover:text-ink"
+              title="Notificaciones push (PWA)"
+            >
+              {pushState === "on" ? (
+                <BellRing size={15} className="text-info" />
+              ) : (
+                <Bell size={15} className={pushState === "loading" ? "animate-pulse" : ""} />
+              )}
+            </button>
+          )}
+          <button
+            onClick={onToggleSound}
+            className="rounded p-1.5 text-mut transition-colors hover:bg-raised hover:text-ink"
+            title={soundOn ? "Silenciar alertas" : "Activar sonido de alertas"}
+          >
+            {soundOn ? <Volume2 size={15} /> : <VolumeX size={15} />}
+          </button>
+        </div>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto">
         {alerts.length === 0 ? (

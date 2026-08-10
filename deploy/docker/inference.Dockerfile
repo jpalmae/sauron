@@ -25,7 +25,7 @@ RUN apt-get update \
         curl ca-certificates \
         gstreamer1.0-tools gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
         gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav \
-        libglib2.0-0 libgl1 ffmpeg \
+        libglib2.0-0 libgl1 ffmpeg tesseract-ocr \
     && rm -rf /var/lib/apt/lists/*
 
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh

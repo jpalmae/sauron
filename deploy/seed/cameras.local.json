@@ -53,7 +53,9 @@
         "congestion_seconds": 20,
         "congestion_cooldown_s": 60
       }
-    }
+    },
+    "latitude": 38.481128,
+    "longitude": -121.510528
   },
   {
     "name": "Caltrans US-50 @ Howe Ave (Sacramento)",
@@ -109,7 +111,9 @@
         "congestion_seconds": 20,
         "congestion_cooldown_s": 60
       }
-    }
+    },
+    "latitude": 38.554517,
+    "longitude": -121.40696
   },
   {
     "name": "IH-35 @ Aquarena Springs (Texas, YouTube)",
@@ -165,6 +169,8 @@
         "congestion_seconds": 30,
         "congestion_cooldown_s": 120
       }
-    }
+    },
+    "latitude": 29.8834,
+    "longitude": -97.9264
   }
 ]

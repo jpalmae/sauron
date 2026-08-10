@@ -48,6 +48,12 @@ class Settings(BaseSettings):
     seed_cameras_path: str = ""
     # go2rtc WHEP bridge para preview en vivo de camaras RTSP (via nginx /go2rtc/).
     live_go2rtc_enabled: bool = False
+    # CLIP semantic search (natural language evidence search)
+    clip_models_dir: str = "models"
+    # Web Push (PWA): VAPID keypair (generate: python -m sauron_api.tools_vapid)
+    vapid_private_key: str = ""
+    vapid_public_key: str = ""
+    vapid_contact: str = "mailto:admin@sauron.local"
 
 
 _settings: Settings | None = None

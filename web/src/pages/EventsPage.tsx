@@ -1,4 +1,4 @@
-import { Download } from "lucide-react";
+import { Download, Grid2x2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
   api,
@@ -147,6 +147,18 @@ export default function EventsPage() {
             />
             sin acusar
           </label>
+          <button
+            onClick={() =>
+              void api.download(
+                api.synopsisUrl(filters.camera_id ?? null, 24, filters.event_type),
+                "synopsis.jpg",
+              )
+            }
+            className="flex items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-sm text-mut transition-colors hover:text-ink"
+            title="Contact sheet de snapshots (24 h)"
+          >
+            <Grid2x2 size={14} /> Resumen
+          </button>
           <button
             onClick={() => void api.download(`/api/v1/reports/events.csv?${new URLSearchParams(Object.entries(filters).filter(([, v]) => v) as [string, string][])}`, "eventos.csv")}
             className="flex items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-sm text-mut transition-colors hover:text-ink"

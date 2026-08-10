@@ -151,11 +151,21 @@ class ThresholdsConfig(BaseModel):
     occupancy_interval_s: float = 30.0
 
 
+class AlprConfig(BaseModel):
+    enabled: bool = False
+    backend: Literal["tesseract", "vlm"] = "tesseract"
+    # Plates (normalized, uppercase alnum) that trigger a critical alert
+    watchlist: list[str] = Field(default_factory=list)
+    min_confidence: float = 0.35
+    ocr_interval_frames: int = 10  # OCR at most every N frames per track
+
+
 class ROIConfig(BaseModel):
     lines: list[LineConfig] = Field(default_factory=list)
     polygons: list[PolygonConfig] = Field(default_factory=list)
     homography: HomographyConfig | None = None
     thresholds: ThresholdsConfig = Field(default_factory=ThresholdsConfig)
+    alpr: AlprConfig | None = None
 
 
 class StreamConfig(BaseModel):

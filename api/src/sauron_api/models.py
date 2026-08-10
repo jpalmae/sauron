@@ -19,6 +19,14 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 JSONBCompat = JSON().with_variant(JSONB, "postgresql")
 
+try:
+    from pgvector.sqlalchemy import Vector
+    from sqlalchemy.types import TypeEngine
+
+    EmbeddingType: TypeEngine = Vector(512).with_variant(JSON, "sqlite")
+except ImportError:  # dev/test without pgvector
+    EmbeddingType = JSON()
+
 
 class Base(DeclarativeBase):
     pass
@@ -33,6 +41,10 @@ class Camera(Base):
     rtsp_url: Mapped[str] = mapped_column(Text, default="")
     roi_config: Mapped[dict | None] = mapped_column(JSONBCompat, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    detector: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    model: Mapped[str | None] = mapped_column(String(40), nullable=True)
 
 
 class AnalyticsEvent(Base):
@@ -56,6 +68,20 @@ class AnalyticsEvent(Base):
         DateTime(timezone=True), nullable=True
     )
     acknowledged_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # CLIP visual embedding (pgvector); set when embeddings are enabled
+    embedding: Mapped[list[float] | None] = mapped_column(EmbeddingType, nullable=True)
+
+
+class PushSubscription(Base):
+    __tablename__ = "push_subscriptions"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    endpoint: Mapped[str] = mapped_column(Text, unique=True)
+    keys: Mapped[dict] = mapped_column(JSON)
+    user_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
 
 
 class HourlyKpi(Base):

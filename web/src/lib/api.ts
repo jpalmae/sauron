@@ -17,6 +17,10 @@ export interface Camera {
   rtsp_url: string;
   roi_config: RoiConfig | null;
   is_active: boolean;
+  latitude: number | null;
+  longitude: number | null;
+  detector: string | null;
+  model: string | null;
 }
 
 export interface EventItem {
@@ -164,6 +168,30 @@ export const api = {
     apiFetch<{ kind: "hls" | "whep" | "none"; url: string }>(
       `/api/v1/streams/${streamId}/live-url`,
     ),
+  models: () =>
+    apiFetch<{
+      models: { name: string; family: string; size_mb: number; profile: string }[];
+      backends: string[];
+    }>("/api/v1/models"),
+  search: (q: string, cameraId?: string, limit = 24) => {
+    const params = new URLSearchParams({ q, limit: String(limit) });
+    if (cameraId) params.set("camera_id", cameraId);
+    return apiFetch<{ query: string; results: { distance: number; event: EventItem }[] }>(
+      `/api/v1/search?${params}`,
+    );
+  },
+  pushPublicKey: () => apiFetch<{ public_key: string }>("/api/v1/push/public-key"),
+  pushSubscribe: (endpoint: string, keys: { p256dh: string; auth: string }) =>
+    apiFetch("/api/v1/push/subscribe", {
+      method: "POST",
+      body: JSON.stringify({ endpoint, keys }),
+    }),
+  synopsisUrl: (cameraId: string | null, hours: number, eventType?: string) => {
+    const params = new URLSearchParams({ hours: String(hours) });
+    if (cameraId) params.set("camera_id", cameraId);
+    if (eventType) params.set("event_type", eventType);
+    return `/api/v1/reports/synopsis.jpg?${params}`;
+  },
   occupancy: (cameraId: string) =>
     apiFetch<OccupancyStats>(`/api/v1/cameras/${cameraId}/occupancy`),
   kpis: (cameraId: string | null, since: Date, until: Date, bucket: string) => {

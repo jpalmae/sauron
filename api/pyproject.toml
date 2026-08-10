@@ -17,6 +17,11 @@ dependencies = [
     "pwdlib[argon2]>=0.2",
     "yt-dlp>=2026.1",
     "httpx>=0.27",
+    "pgvector>=0.3",
+    "onnxruntime>=1.19",
+    "pillow>=10.0",
+    "tokenizers>=0.20",
+    "pywebpush>=2.0",
 ]
 
 [project.optional-dependencies]

@@ -5,6 +5,7 @@ from collections.abc import Callable
 
 from ..config import PolygonConfig, PolygonRuleName, ROIConfig
 from ..types import Frame, TrackedObject
+from .alpr import AlprRule
 from .base import Rule, RuleContext
 from .chair_occupancy import ChairOccupancyRule
 from .congestion import CongestionRule
@@ -45,6 +46,11 @@ class RulesEngine:
                     self.rules.append(factory(poly))
                 except ValueError as e:
                     log.warning("[%s] skipping rule %s: %s", camera_id, rule_name, e)
+        if roi.alpr is not None and roi.alpr.enabled:
+            from ..alpr.ocr import build_ocr
+
+            self.rules.append(AlprRule(roi.alpr, build_ocr(roi.alpr.backend)))
+            log.info("[%s] ALPR enabled (%s)", camera_id, roi.alpr.backend)
 
     def process(self, frame: Frame, tracks: list[TrackedObject]) -> list[Event]:
         if self.ctx.speed_estimator is not None:

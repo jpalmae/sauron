@@ -13,6 +13,10 @@ class CameraCreate(BaseModel):
     rtsp_url: str = ""
     roi_config: dict[str, Any] | None = None
     is_active: bool = True
+    latitude: float | None = None
+    longitude: float | None = None
+    detector: str | None = None
+    model: str | None = None
 
 
 class CameraUpdate(BaseModel):
@@ -20,6 +24,10 @@ class CameraUpdate(BaseModel):
     rtsp_url: str | None = None
     roi_config: dict[str, Any] | None = None
     is_active: bool | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    detector: str | None = None
+    model: str | None = None
 
 
 class CameraRead(BaseModel):
@@ -29,6 +37,10 @@ class CameraRead(BaseModel):
     rtsp_url: str
     roi_config: dict[str, Any] | None
     is_active: bool
+    latitude: float | None = None
+    longitude: float | None = None
+    detector: str | None = None
+    model: str | None = None
 
     model_config = {"from_attributes": True}
 

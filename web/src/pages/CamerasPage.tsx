@@ -77,6 +77,8 @@ function CameraForm({
 
 export default function CamerasPage() {
   const [cameras, setCameras] = useState<Camera[]>([]);
+  const [catalog, setCatalog] = useState<{ name: string; profile: string }[]>([]);
+  const [backends, setBackends] = useState<string[]>([]);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
@@ -84,6 +86,13 @@ export default function CamerasPage() {
   const reload = () => api.cameras().then(setCameras).catch(console.error);
   useEffect(() => {
     void reload();
+    api
+      .models()
+      .then((m) => {
+        setCatalog(m.models);
+        setBackends(m.backends);
+      })
+      .catch(console.error);
   }, []);
 
   return (
@@ -119,6 +128,7 @@ export default function CamerasPage() {
               <th className="px-4 py-2.5">Nombre</th>
               <th className="px-4 py-2.5">stream_id</th>
               <th className="px-4 py-2.5">ROI</th>
+              <th className="px-4 py-2.5">Backend / Modelo</th>
               <th className="px-4 py-2.5">Estado</th>
               <th className="px-4 py-2.5" />
             </tr>
@@ -132,6 +142,42 @@ export default function CamerasPage() {
                   {c.roi_config
                     ? `${c.roi_config.lines?.length ?? 0} líneas · ${c.roi_config.polygons?.length ?? 0} polígonos`
                     : "sin configurar"}
+                </td>
+                <td className="px-4 py-2.5">
+                  <div className="flex gap-1.5">
+                    <select
+                      value={c.detector ?? ""}
+                      title="Backend de detección (rollout OTA)"
+                      onChange={async (e) => {
+                        await api.updateCamera(c.id, { detector: e.target.value || null });
+                        await reload();
+                      }}
+                      className="rounded border border-line bg-base px-1.5 py-1 font-mono text-[11px]"
+                    >
+                      <option value="">default</option>
+                      {backends.map((b) => (
+                        <option key={b} value={b}>
+                          {b}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      value={c.model ?? ""}
+                      title="Modelo (catálogo)"
+                      onChange={async (e) => {
+                        await api.updateCamera(c.id, { model: e.target.value || null });
+                        await reload();
+                      }}
+                      className="rounded border border-line bg-base px-1.5 py-1 font-mono text-[11px]"
+                    >
+                      <option value="">default</option>
+                      {catalog.map((m) => (
+                        <option key={m.name} value={m.name}>
+                          {m.name} ({m.profile})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </td>
                 <td className="px-4 py-2.5">
                   <button
@@ -189,7 +235,7 @@ export default function CamerasPage() {
               </tr>,
               editing === c.id && (
                 <tr key={`${c.id}-edit`} className="border-b border-line/50 bg-panel/60">
-                  <td colSpan={5} className="px-4 py-3">
+                  <td colSpan={6} className="px-4 py-3">
                     <CameraForm
                       initial={{ name: c.name, stream_id: c.stream_id, rtsp_url: c.rtsp_url }}
                       onSave={async (d) => {

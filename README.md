@@ -133,6 +133,23 @@ python inference/tools/onvif_discover.py --user admin --password secret
 # imprime un bloque streams: listo para pipeline.yaml
 ```
 
+## Features P1 (nivel mercado)
+
+- **ALPR (patentes)**: `roi.alpr.enabled: true` en el ROI de la cámara + opcional
+  `watchlist: [ABC123]` → evento `ALPR` / `ALPR_WATCHLIST` (crítico). OCR local
+  (tesseract, en las imágenes) o VLM (`backend: vlm`).
+- **Búsqueda semántica (CLIP)**: página *Búsqueda* — "camión rojo", "persona
+  caída"… Embeddings CLIP ViT-B/32 ONNX CPU generados al ingerir snapshots
+  (pgvector). Regenerar modelos: `python api/tools/export_clip.py`.
+- **Mapa GIS**: página *Mapa* (react-leaflet + OSM) con estado por cámara;
+  `latitude/longitude` editables en Cámaras.
+- **Push PWA**: campana en el panel de alertas → notificaciones push nativas
+  para warning/critical (service worker + Web Push VAPID).
+- **OTA de modelos**: selects *Backend / Modelo* por cámara en Cámaras
+  (rollout sin tocar YAML; reconcile lo levanta en caliente).
+- **Sinopsis**: botón *Resumen* en Eventos → contact sheet JPEG de snapshots
+  (ventana configurable), `GET /api/v1/reports/synopsis.jpg`.
+
 ## CI/CD
 
 `.github/workflows/ci.yml`: pytest+ruff+mypy (inference, api), vitest+build

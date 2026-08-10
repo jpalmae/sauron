@@ -1,4 +1,4 @@
-import { Activity, Camera, ChartColumn, LogOut, ScrollText, Video } from "lucide-react";
+import { Activity, Camera, ChartColumn, LogOut, Map, ScrollText, Search, Video } from "lucide-react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { auth } from "../lib/api";
 import { useBranding } from "../lib/branding";
@@ -6,6 +6,8 @@ import { useBranding } from "../lib/branding";
 const NAV = [
   { to: "/", label: "En vivo", icon: Video, end: true },
   { to: "/analytics", label: "Analítica", icon: ChartColumn },
+  { to: "/search", label: "Búsqueda", icon: Search },
+  { to: "/map", label: "Mapa", icon: Map },
   { to: "/events", label: "Eventos", icon: ScrollText },
   { to: "/cameras", label: "Cámaras", icon: Camera },
 ];

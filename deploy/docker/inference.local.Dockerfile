@@ -8,7 +8,7 @@ ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        curl ca-certificates ffmpeg libglib2.0-0 libgl1 \
+        curl ca-certificates ffmpeg libglib2.0-0 libgl1 tesseract-ocr \
     && rm -rf /var/lib/apt/lists/*
 
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh

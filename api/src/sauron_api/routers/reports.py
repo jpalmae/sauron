@@ -13,11 +13,57 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..auth import get_current_user
 from ..db import get_session
 from ..models import AnalyticsEvent, Camera, User
+from ..storage import get_storage
+from ..synopsis import build_contact_sheet, fmt_label
 from .kpis import KPIS_SQL
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
 MAX_ROWS = 50_000
+
+
+@router.get("/synopsis.jpg")
+async def synopsis_jpg(
+    session: AsyncSession = Depends(get_session),
+    _: User = Depends(get_current_user),
+    camera_id: uuid.UUID | None = None,
+    hours: int = Query(6, ge=1, le=168),
+    max_items: int = Query(48, ge=1, le=96),
+    event_type: str | None = None,
+):
+    """Contact sheet of event snapshots for a time window (video synopsis lite)."""
+    from datetime import UTC, datetime, timedelta
+
+    from fastapi.responses import Response
+
+    since = datetime.now(UTC) - timedelta(hours=hours)
+    query = (
+        select(AnalyticsEvent)
+        .where(AnalyticsEvent.timestamp >= since, AnalyticsEvent.snapshot_key.is_not(None))
+        .order_by(AnalyticsEvent.timestamp.desc())
+        .limit(max_items)
+    )
+    if camera_id:
+        query = query.where(AnalyticsEvent.camera_id == camera_id)
+    if event_type:
+        query = query.where(AnalyticsEvent.event_type == event_type)
+    result = await session.execute(query)
+    rows = list(result.scalars().all())
+
+    storage = get_storage()
+    items: list[tuple[bytes, str]] = []
+    for row in reversed(rows):  # chronological
+        if not row.snapshot_key:
+            continue
+        data = await storage.download_bytes(row.snapshot_key)
+        if data:
+            items.append((data, fmt_label(row.timestamp, row.event_type)))
+    sheet = build_contact_sheet(items)
+    return Response(
+        content=sheet,
+        media_type="image/jpeg",
+        headers={"Content-Disposition": 'inline; filename="synopsis.jpg"'},
+    )
 
 
 @router.get("/events.csv")

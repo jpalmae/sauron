@@ -58,6 +58,15 @@ async def run_consumer(app) -> None:
                         "clip_key": row.clip_key,
                     }
                 )
+                if row.priority in ("critical", "warning"):
+                    from .notify import send_push_to_all
+
+                    await send_push_to_all(
+                        session,
+                        title=f"⚠ {row.event_type}",
+                        body=f"{row.rule_id} · {payload.camera_id}",
+                        url="/",
+                    )
         except asyncio.CancelledError:
             raise
         except Exception:
