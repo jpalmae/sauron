@@ -102,9 +102,9 @@ async def live_url(
     src = camera.rtsp_url or ""
     settings = get_settings()
     if src.startswith("rtsp://") and settings.live_go2rtc_enabled:
-        # puente go2rtc (Xiaomi/Mi Home, etc.): WHEP same-origin via nginx /go2rtc/
+        # go2rtc HLS (transcodifica H.265 → H.264 para el navegador)
         name = urlparse(src).path.strip("/") or stream_id
-        return LiveUrl(kind="whep", url=f"/go2rtc/api/webrtc?src={name}")
+        return LiveUrl(kind="hls", url=f"/go2rtc/api/stream.m3u8?src={name}")
     if src.startswith("rtsp://"):
         return LiveUrl(kind="whep", url=f"/whep/{stream_id}")
     if _is_youtube(src) or ".m3u8" in src:
