@@ -20,6 +20,7 @@ from .routers import (
     kpis,
     models,
     notifications,
+    pipeline_config,
     push,
     reports,
     search,
@@ -79,6 +80,7 @@ def create_app() -> FastAPI:
     app.include_router(reports.router, prefix="/api/v1")
     app.include_router(streams.router, prefix="/api/v1")
     app.include_router(branding.router, prefix="/api/v1")
+    app.include_router(pipeline_config.router, prefix="/api/v1")
     app.include_router(ws_router)
 
     @app.get("/healthz")

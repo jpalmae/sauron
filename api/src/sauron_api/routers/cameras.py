@@ -9,11 +9,23 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth import get_current_user, require_admin, require_ingest
+import json
+from ..config import get_settings
 from ..db import get_session
 from ..models import AnalyticsEvent, Camera, HourlyKpi, User
 from ..schemas import CameraCreate, CameraRead, CameraUpdate
 
 router = APIRouter(prefix="/cameras", tags=["cameras"])
+
+_aioredis = None
+
+
+def _redis_client():
+    global _aioredis
+    if _aioredis is None:
+        import redis.asyncio as aioredis
+        _aioredis = aioredis.from_url(get_settings().redis_url)
+    return _aioredis
 
 
 @router.get("", response_model=list[CameraRead])
@@ -139,6 +151,22 @@ async def camera_occupancy(
         "free_seats": chair_meta.get("free"),
         "seat_utilization": chair_meta.get("utilization"),
     }
+
+
+@router.get("/{camera_id}/detections")
+async def camera_detections(
+    camera_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+    _: User = Depends(get_current_user),
+):
+    """Latest frame detections (boxes/posture/keypoints) for the live overlay."""
+    camera = await session.get(Camera, camera_id)
+    if camera is None:
+        raise HTTPException(404, "camera not found")
+    data = await _redis_client().get(f"sauron:detections:{camera.stream_id}")
+    if not data:
+        return {"objects": []}
+    return json.loads(data)
 
 
 @router.patch("/{camera_id}", response_model=CameraRead)

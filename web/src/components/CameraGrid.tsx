@@ -2,6 +2,7 @@ import Hls from "hls.js";
 import { CameraOff, Maximize2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { api, auth, type Camera } from "../lib/api";
+import DetectionsOverlay from "./DetectionsOverlay";
 
 type TileState = "connecting" | "live" | "offline";
 
@@ -113,6 +114,7 @@ function LiveTile({ camera }: { camera: Camera }) {
 
   return (
     <div className="group relative overflow-hidden rounded-lg border border-line bg-panel">
+        <DetectionsOverlay cameraId={camera.id} />
       {source?.kind === "hls" && <HlsVideo url={source.url} onState={setState} />}
       {source?.kind === "whep" && <WhepVideo url={source.url} onState={setState} />}
       {(!source || state !== "live") && (

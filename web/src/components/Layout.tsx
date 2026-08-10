@@ -1,4 +1,4 @@
-import { Activity, Bell, Camera, ChartColumn, LogOut, Map, ScrollText, Search, Video } from "lucide-react";
+import { Activity, Bell, Camera, ChartColumn, LogOut, Map, ScrollText, Search, SlidersHorizontal, Video } from "lucide-react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { auth } from "../lib/api";
 import { useBranding } from "../lib/branding";
@@ -11,6 +11,7 @@ const NAV = [
   { to: "/events", label: "Eventos", icon: ScrollText },
   { to: "/notifications", label: "Notificaciones", icon: Bell },
   { to: "/cameras", label: "Cámaras", icon: Camera },
+  { to: "/engine", label: "Engine", icon: SlidersHorizontal },
 ];
 
 export default function Layout({ wsConnected }: { wsConnected: boolean }) {
