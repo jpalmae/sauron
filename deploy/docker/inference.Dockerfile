@@ -37,7 +37,7 @@ WORKDIR /app
 COPY inference/pyproject.toml ./
 COPY inference/src ./src
 RUN uv venv /opt/venv --python 3.11 \
-    && uv pip install --python /opt/venv/bin/python -e ".[gpu]"
+    && uv pip install --python /opt/venv/bin/python -e ".[gpu,live]"
 
 COPY inference/tools ./tools
 # Model catalog baked into the image (see tools/export_models.py); engines are
