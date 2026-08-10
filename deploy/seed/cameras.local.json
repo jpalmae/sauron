@@ -1,68 +1,44 @@
 [
   {
-    "name": "Shinjuku Live (Tokio)",
-    "stream_id": "shinjuku-live",
-    "rtsp_url": "https://www.youtube.com/watch?v=gFRtAAmiFbE",
+    "name": "Caltrans I-5 @ Pocket Rd (Sacramento)",
+    "stream_id": "caltrans-i5-pocket",
+    "rtsp_url": "https://wzmedia.dot.ca.gov/D3/5_Pocket_Rd_OC_SAC5_SB.stream/playlist.m3u8",
     "roi_config": {
-      "lines": [{ "id": "L1", "points": [[60, 520], [1000, 520]] }],
-      "polygons": [
-        {
-          "id": "calzada",
-          "kind": "lane",
-          "points": [[60, 380], [1000, 380], [1100, 710], [40, 710]],
-          "rules": ["stopped", "congestion"]
-        }
-      ],
-      "thresholds": {
-        "stopped_seconds": 10,
-        "congestion_occupancy": 0.25,
-        "congestion_seconds": 20,
-        "congestion_cooldown_s": 60
-      }
+      "lines": [{ "id": "L1", "points": [[40, 320], [600, 320]] }],
+      "polygons": [{
+        "id": "freeway", "kind": "lane",
+        "points": [[40, 150], [600, 150], [620, 470], [20, 470]],
+        "rules": ["stopped", "congestion"]
+      }],
+      "thresholds": {"stopped_seconds": 12, "congestion_occupancy": 0.25, "congestion_seconds": 20, "congestion_cooldown_s": 60}
     }
   },
   {
-    "name": "IH-35 @ Aquarena Springs (Texas)",
-    "stream_id": "ih35-aquarena",
-    "rtsp_url": "https://www.youtube.com/watch?v=eHY0dJK7giA",
+    "name": "Caltrans US-50 @ Howe Ave (Sacramento)",
+    "stream_id": "caltrans-us50-howe",
+    "rtsp_url": "https://wzmedia.dot.ca.gov/D3/50_Howe_Ave_SAC50_WB.stream/playlist.m3u8",
     "roi_config": {
-      "lines": [{ "id": "L1", "points": [[300, 450], [950, 450]] }],
-      "polygons": [
-        {
-          "id": "freeway",
-          "kind": "lane",
-          "points": [[300, 150], [950, 150], [1000, 700], [250, 700]],
-          "rules": ["stopped", "congestion"]
-        }
-      ],
-      "thresholds": {
-        "stopped_seconds": 12,
-        "congestion_occupancy": 0.3,
-        "congestion_seconds": 30,
-        "congestion_cooldown_s": 120
-      }
+      "lines": [{ "id": "L1", "points": [[40, 320], [600, 320]] }],
+      "polygons": [{
+        "id": "freeway", "kind": "lane",
+        "points": [[40, 150], [600, 150], [620, 470], [20, 470]],
+        "rules": ["stopped", "congestion"]
+      }],
+      "thresholds": {"stopped_seconds": 12, "congestion_occupancy": 0.25, "congestion_seconds": 20, "congestion_cooldown_s": 60}
     }
   },
   {
-    "name": "Grand Avenue Bridge (Glenwood Springs)",
-    "stream_id": "grand-avenue",
-    "rtsp_url": "https://www.youtube.com/watch?v=SNvppiU1-IM",
+    "name": "Caltrans I-5 @ 43rd Ave (Sacramento)",
+    "stream_id": "caltrans-i5-43rd",
+    "rtsp_url": "https://wzmedia.dot.ca.gov/D3/5_43rd_Ave_SAC5_NB.stream/playlist.m3u8",
     "roi_config": {
-      "lines": [{ "id": "L1", "points": [[0, 550], [1280, 550]] }],
-      "polygons": [
-        {
-          "id": "street",
-          "kind": "lane",
-          "points": [[0, 400], [1280, 400], [1280, 700], [0, 700]],
-          "rules": ["stopped", "congestion"]
-        }
-      ],
-      "thresholds": {
-        "stopped_seconds": 12,
-        "congestion_occupancy": 0.3,
-        "congestion_seconds": 30,
-        "congestion_cooldown_s": 120
-      }
+      "lines": [{ "id": "L1", "points": [[40, 320], [600, 320]] }],
+      "polygons": [{
+        "id": "freeway", "kind": "lane",
+        "points": [[40, 150], [600, 150], [620, 470], [20, 470]],
+        "rules": ["stopped", "congestion"]
+      }],
+      "thresholds": {"stopped_seconds": 12, "congestion_occupancy": 0.25, "congestion_seconds": 20, "congestion_cooldown_s": 60}
     }
   }
 ]
