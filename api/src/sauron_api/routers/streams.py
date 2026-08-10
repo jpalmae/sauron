@@ -166,6 +166,7 @@ async def hls_playlist(
 @router.get("/{stream_id}/hls/proxy")
 async def hls_proxy(
     stream_id: str,
+    request: Request,
     u: str,
     _: None = Depends(hls_user),
 ):
@@ -176,6 +177,18 @@ async def hls_proxy(
     host = urlparse(url).netloc
     if host not in _allowed_hosts:
         raise HTTPException(403, "host not allowed")
+
+    # Variant playlists must be rewritten so their segments also go through the proxy
+    if url.endswith(".m3u8"):
+        resp = await _http_client().get(url)
+        if resp.status_code != 200:
+            raise HTTPException(502, f"upstream playlist error: {resp.status_code}")
+        base = url.rsplit("/", 1)[0]
+        token = request.query_params.get("token", "")
+        body = _rewrite_manifest(resp.text, base, stream_id, token)
+        return Response(
+            body, media_type="application/vnd.apple.mpegurl", headers={"Cache-Control": "no-store"}
+        )
 
     async def stream():
         client = _http_client()
