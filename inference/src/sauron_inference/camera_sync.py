@@ -75,5 +75,20 @@ class APICameraSource:
             )
         return streams
 
+    def fetch_engine_config(self) -> tuple[dict, int] | None:
+        """Pull GUI-editable engine defaults (backend/model/classes/thresholds)."""
+        headers = {}
+        if self.ingest_token:
+            headers["Authorization"] = f"Bearer {self.ingest_token}"
+        try:
+            resp = self._client.get("/api/v1/pipeline-config", headers=headers)
+            if resp.status_code != 200:
+                return None
+            data = resp.json()
+            return data.get("defaults") or {}, int(data.get("target_fps") or 0)
+        except Exception:
+            log.debug("engine config fetch failed")
+            return None
+
     def close(self) -> None:
         self._client.close()

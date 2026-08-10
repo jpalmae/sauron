@@ -11,7 +11,7 @@ from ..bridge.redis_publisher import RedisEventPublisher
 from ..capture.base import FrameSource
 from ..capture.rtsp import RTSPSource
 from ..capture.synthetic import FileSource, SyntheticSource
-from ..config import PipelineConfig, StreamConfig
+from ..config import DefaultsConfig, PipelineConfig, StreamConfig
 from ..detection.base import Detector
 from ..detection.mock import MockDetector
 from ..detection.multi import MultiDetector
@@ -120,7 +120,9 @@ class PipelineManager:
         offline_seconds: float = 60.0,
     ) -> None:
         self.cfg = cfg
-        self.on_tracks = on_tracks or NullCallback()
+        self._user_on_tracks = on_tracks
+        self._detections_publisher = self._build_detections_publisher()
+        self.on_tracks = self._on_tracks
         self._user_on_event = on_event
         self.on_event = self._build_event_sink()
         self._detector_factory = detector_factory
@@ -135,6 +137,7 @@ class PipelineManager:
         self._processed_seen: dict[str, int] = {}
         self._offline: set[str] = set()
         self._last_sync = -1.0
+        self._defaults_hash: str = ""
 
     def _build_event_sink(self) -> EventCallback | None:
         sinks: list[EventCallback] = []
@@ -159,6 +162,27 @@ class PipelineManager:
                     log.exception("event sink failed")
 
         return emit
+
+    def _build_detections_publisher(self):
+        redis_url = os.environ.get("SAURON_REDIS_URL") or self.cfg.app.redis_url
+        if not redis_url:
+            return None
+        try:
+            from ..bridge.detections_publisher import RedisDetectionsPublisher
+            log.info("publishing live detections to redis")
+            return RedisDetectionsPublisher(redis_url)
+        except Exception:
+            log.exception("detections publisher init failed")
+            return None
+
+    def _on_tracks(self, camera_id, frame, tracks):
+        if self._user_on_tracks is not None:
+            try:
+                self._user_on_tracks(camera_id, frame, tracks)
+            except Exception:
+                log.exception("on_tracks callback failed")
+        if self._detections_publisher is not None:
+            self._detections_publisher(camera_id, frame, tracks)
 
     @staticmethod
     def _hash(stream: StreamConfig) -> str:
@@ -275,9 +299,34 @@ class PipelineManager:
             p.stop()
         log.info("all pipelines stopped")
 
+    def _stop_all(self) -> None:
+        for p in self.pipelines:
+            try:
+                p.stop()
+            except Exception:
+                log.exception("error stopping stream %s", p.source.camera_id)
+        self.pipelines = []
+        self._stream_hashes.clear()
+
     def _sync_cameras(self) -> None:
         self._last_sync = time.monotonic()
         try:
+            ec = self.camera_source.fetch_engine_config()
+            if ec is not None:
+                new_defaults, new_fps = ec
+                dh = hashlib.sha1(json.dumps(new_defaults, sort_keys=True).encode()).hexdigest()
+                if dh != self._defaults_hash:
+                    try:
+                        self.cfg.defaults = DefaultsConfig.model_validate(new_defaults)
+                        self._defaults_hash = dh
+                        self._stop_all()
+                        log.info("engine defaults reloaded from API")
+                    except Exception:
+                        log.exception("invalid engine defaults; keeping current")
+                if new_fps and new_fps != self.camera_source.target_fps:
+                    self.camera_source.target_fps = new_fps
+                    self._stop_all()
+                    log.info("target_fps reloaded -> %s", new_fps)
             desired = self.camera_source.fetch_streams()
             log.debug("camera source returned %d streams", len(desired))
             self.reconcile(desired)

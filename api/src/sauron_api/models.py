@@ -97,6 +97,14 @@ class HourlyKpi(Base):
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
+class EngineConfig(Base):
+    __tablename__ = "engine_config"
+    id: Mapped[int] = mapped_column(primary_key=True, default=1)
+    defaults: Mapped[dict] = mapped_column(JSONBCompat, nullable=False)
+    target_fps: Mapped[int] = mapped_column(Integer, default=5)
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class User(Base):
     __tablename__ = "users"
 

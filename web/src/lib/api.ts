@@ -77,6 +77,27 @@ export interface OccupancyStats {
   seat_utilization: number | null;
 }
 
+export interface EngineConfig {
+  defaults: Record<string, unknown>;
+  target_fps: number;
+  updated_at: string | null;
+}
+
+export interface DetectionObj {
+  id: number;
+  class: string;
+  box: [number, number, number, number];
+  posture?: string;
+  keypoints?: [number, number][];
+}
+
+export interface DetectionsPayload {
+  ts: number;
+  width: number;
+  height: number;
+  objects: DetectionObj[];
+}
+
 export interface RoiConfig {
   lines?: RoiLine[];
   polygons?: RoiPolygon[];
@@ -236,6 +257,11 @@ export const api = {
     apiFetch(`/api/v1/notifications/${id}/test`, { method: "POST" }),
   occupancy: (cameraId: string) =>
     apiFetch<OccupancyStats>(`/api/v1/cameras/${cameraId}/occupancy`),
+  detections: (cameraId: string) =>
+    apiFetch<DetectionsPayload>(`/api/v1/cameras/${cameraId}/detections`),
+  pipelineConfig: () => apiFetch<EngineConfig>("/api/v1/pipeline-config"),
+  updatePipelineConfig: (body: { defaults: Record<string, unknown>; target_fps: number }) =>
+    apiFetch<EngineConfig>("/api/v1/pipeline-config", { method: "PUT", body: JSON.stringify(body) }),
   kpis: (cameraId: string | null, since: Date, until: Date, bucket: string) => {
     const params = new URLSearchParams({ bucket });
     if (cameraId) params.set("camera_id", cameraId);
