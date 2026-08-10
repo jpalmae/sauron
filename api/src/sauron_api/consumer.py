@@ -67,6 +67,9 @@ async def run_consumer(app) -> None:
                         body=f"{row.rule_id} · {payload.camera_id}",
                         url="/",
                     )
+                from .notifier import notify_channels
+
+                await notify_channels(session, row, payload.camera_id)
         except asyncio.CancelledError:
             raise
         except Exception:

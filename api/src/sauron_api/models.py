@@ -107,3 +107,20 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
+
+
+class NotificationChannel(Base):
+    __tablename__ = "notification_channels"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(100))
+    type: Mapped[str] = mapped_column(String(20))  # webhook | email | telegram
+    config: Mapped[dict] = mapped_column(JSON)
+    min_priority: Mapped[str] = mapped_column(String(20), default="critical")
+    camera_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("cameras.id"), nullable=True
+    )
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )

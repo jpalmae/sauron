@@ -1,15 +1,30 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { api, auth } from "../lib/api";
 import { useBranding } from "../lib/branding";
+
+const SSO_LABELS: Record<string, string> = {
+  microsoft: "Entrar con Microsoft",
+  google: "Entrar con Google",
+};
 
 export default function LoginPage() {
   const brand = useBranding();
   const navigate = useNavigate();
+  const [params] = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // SSO callback: /login?token=<jwt>
+  useEffect(() => {
+    const token = params.get("token");
+    if (token) {
+      auth.set(token);
+      navigate("/", { replace: true });
+    }
+  }, [params, navigate]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -41,6 +56,24 @@ export default function LoginPage() {
             {brand.company_name && <div className="text-xs text-mut">{brand.company_name}</div>}
           </div>
         </div>
+
+        {brand.sso_providers.length > 0 && (
+          <div className="space-y-2">
+            {brand.sso_providers.map((p) => (
+              <a
+                key={p}
+                href={`/api/v1/auth/oidc/${p}/login`}
+                className="block w-full rounded-md border border-line px-4 py-2.5 text-center text-sm text-ink transition-colors hover:bg-raised"
+              >
+                {SSO_LABELS[p] ?? `Entrar con ${p}`}
+              </a>
+            ))}
+            <div className="flex items-center gap-3 text-[11px] text-dim">
+              <span className="h-px flex-1 bg-line" /> o con cuenta local <span className="h-px flex-1 bg-line" />
+            </div>
+          </div>
+        )}
+
         <div className="space-y-3">
           <input
             type="email"

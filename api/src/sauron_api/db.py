@@ -50,6 +50,14 @@ async def init_db() -> None:
             for stmt in HYPERTABLE_DDL.strip().split(";"):
                 if stmt.strip():
                     await conn.execute(text(stmt))
+            settings = get_settings()
+            if settings.retention_days > 0:
+                await conn.execute(
+                    text(
+                        "SELECT add_retention_policy('analytics_events', "
+                        f"INTERVAL '{int(settings.retention_days)} days', if_not_exists => TRUE)"
+                    )
+                )
         else:
             await conn.run_sync(Base.metadata.create_all)
 

@@ -103,6 +103,9 @@ class PipelineManager:
       * dynamic cameras pulled from the Sauron API via ``camera_source`` —
         enables 100% GUI-driven camera management (add/edit/remove in the
         dashboard; the engine reconciles within the poll interval).
+
+    Camera health: emits CAMERA_OFFLINE when a stream stops producing frames
+    for ``offline_seconds``, CAMERA_ONLINE when it recovers.
     """
 
     def __init__(
@@ -113,6 +116,7 @@ class PipelineManager:
         detector_factory=build_detector,
         source_factory=build_source,
         camera_source=None,
+        offline_seconds: float = 60.0,
     ) -> None:
         self.cfg = cfg
         self.on_tracks = on_tracks or NullCallback()
@@ -123,7 +127,11 @@ class PipelineManager:
         self.pipelines: list[StreamPipeline] = []
         self.metrics = StreamMetrics()
         self.camera_source = camera_source
+        self.offline_seconds = offline_seconds
         self._stream_hashes: dict[str, str] = {}
+        self._last_frame: dict[str, float] = {}
+        self._processed_seen: dict[str, int] = {}
+        self._offline: set[str] = set()
         self._last_sync = -1.0
 
     def _build_event_sink(self) -> EventCallback | None:
@@ -262,6 +270,52 @@ class PipelineManager:
         except Exception:
             log.exception("camera sync failed")
 
+    def _check_camera_health(self) -> None:
+        """Emit CAMERA_OFFLINE / CAMERA_ONLINE based on per-stream liveness."""
+        from ..rules.events import Event, EventType, Priority
+
+        now = time.monotonic()
+        for p in self.pipelines:
+            cid = p.source.camera_id
+            if p.frames_processed > self._processed_seen.get(cid, 0):
+                self._processed_seen[cid] = p.frames_processed
+                self._last_frame[cid] = now
+                if cid in self._offline:
+                    self._offline.discard(cid)
+                    self._emit_health(
+                        Event(
+                            event_type=EventType.CAMERA_ONLINE,
+                            camera_id=cid,
+                            timestamp=time.time(),
+                            confidence=1.0,
+                            priority=Priority.INFO,
+                            rule_id="camera-health",
+                            metadata={"recovered": True},
+                        )
+                    )
+                continue
+            last = self._last_frame.get(cid)
+            idle = now - last if last is not None else 0.0
+            if last is not None and idle > self.offline_seconds and cid not in self._offline:
+                self._offline.add(cid)
+                self._emit_health(
+                    Event(
+                        event_type=EventType.CAMERA_OFFLINE,
+                        camera_id=cid,
+                        timestamp=time.time(),
+                        confidence=1.0,
+                        priority=Priority.WARNING,
+                        rule_id="camera-health",
+                        metadata={"idle_seconds": round(idle)},
+                    )
+                )
+
+    def _emit_health(self, event) -> None:
+        log.warning("[%s] %s", event.camera_id, event.event_type)
+        self.metrics.record_event(event.camera_id)
+        if self.on_event is not None:
+            self.on_event(event)
+
     def run_forever(self) -> None:
         self.start()
         if self.camera_source is not None:
@@ -277,6 +331,7 @@ class PipelineManager:
                     self.metrics.sync_counters(
                         p.source.camera_id, p.frames_captured, p.frames_dropped
                     )
+                self._check_camera_health()
                 dead = [p.source.camera_id for p in self.pipelines if not p.alive]
                 if dead:
                     log.warning("dead pipelines: %s", dead)

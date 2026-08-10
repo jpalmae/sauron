@@ -133,6 +133,26 @@ python inference/tools/onvif_discover.py --user admin --password secret
 # imprime un bloque streams: listo para pipeline.yaml
 ```
 
+## Features P0 (operación)
+
+- **Notificaciones multicanal**: webhook / Telegram / email por canal con
+  prioridad mínima y filtro por cámara. CRUD + botón de prueba en
+  *Notificaciones*. Los secretos quedan enmascarados en la API.
+- **Salud de cámara**: `CAMERA_OFFLINE`/`CAMERA_ONLINE` automáticos si un
+  stream deja de producir frames (`SAURON_CAMERA_OFFLINE_S`, default 60s).
+- **Retención**: TimescaleDB `add_retention_policy` en `analytics_events`
+  (`SAURON_RETENTION_DAYS`) + lifecycle MinIO de evidencia
+  (`SAURON_S3_RETENTION_DAYS`). 0 = desactivado.
+- **SSO (MS365 / Google Workspace)**: Authorization Code + discovery + JWKS.
+  Configurar en `.env`:
+  ```
+  OIDC_PROVIDERS_JSON={"microsoft":{"issuer":"https://login.microsoftonline.com/<tenant>/v2.0","client_id":"...","client_secret":"..."},"google":{"issuer":"https://accounts.google.com","client_id":"...","client_secret":"..."}}
+  OIDC_REDIRECT_BASE=https://tu-dominio
+  OIDC_ALLOWED_DOMAINS=empresa.com
+  ```
+  App registration MS365: redirect URI `<OIDC_REDIRECT_BASE>/api/v1/auth/oidc/callback`.
+  El primer usuario SSO queda admin si no hay usuarios; el resto viewer.
+
 ## Features P1 (nivel mercado)
 
 - **ALPR (patentes)**: `roi.alpr.enabled: true` en el ROI de la cámara + opcional

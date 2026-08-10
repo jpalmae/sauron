@@ -17,6 +17,7 @@ class SnapshotStorage:
         self._settings = get_settings()
         self._client = None
         self._public_client = None
+        self._lifecycle_checked = False
 
     @property
     def enabled(self) -> bool:
@@ -32,7 +33,35 @@ class SnapshotStorage:
                 secret_key=self._settings.s3_secret_key,
                 secure=self._settings.s3_secure,
             )
+        if not self._lifecycle_checked:
+            self._lifecycle_checked = True
+            days = self._settings.s3_retention_days
+            if days > 0:
+                try:
+                    self._apply_lifecycle(days)
+                except Exception:
+                    log.exception("failed to apply bucket lifecycle")
         return self._client
+
+    def _apply_lifecycle(self, days: int) -> None:
+        from minio.lifecycleconfig import Expiration, LifecycleConfig, Rule
+
+        client = self._client
+        assert client is not None
+        client.set_bucket_lifecycle(
+            self._settings.s3_bucket,
+            LifecycleConfig(
+                [
+                    Rule(
+                        rule_id="expire-evidence",
+                        status="Enabled",
+                        expiration=Expiration(days=days),
+                    )
+                ]
+            ),
+        )
+        log.info("bucket %s lifecycle: evidence expires after %d days",
+                 self._settings.s3_bucket, days)
 
     def _get_public_client(self):
         """Client bound to the browser-reachable endpoint (presigned URLs).

@@ -8,6 +8,7 @@ export interface Branding {
   accent_color: string;
   support_url: string;
   auth_required: boolean;
+  sso_providers: string[];
 }
 
 export interface Camera {
@@ -192,6 +193,31 @@ export const api = {
     if (eventType) params.set("event_type", eventType);
     return `/api/v1/reports/synopsis.jpg?${params}`;
   },
+  notificationChannels: () =>
+    apiFetch<
+      {
+        id: string;
+        name: string;
+        type: string;
+        config: Record<string, string>;
+        min_priority: string;
+        camera_id: string | null;
+        enabled: boolean;
+      }[]
+    >("/api/v1/notifications"),
+  createChannel: (c: Record<string, unknown>) =>
+    apiFetch("/api/v1/notifications", { method: "POST", body: JSON.stringify(c) }),
+  updateChannel: (id: string, patch: Record<string, unknown>) =>
+    apiFetch(`/api/v1/notifications/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
+  deleteChannel: (id: string) =>
+    fetch(`${BASE}/api/v1/notifications/${id}`, {
+      method: "DELETE",
+      headers: auth.token() ? { Authorization: `Bearer ${auth.token()}` } : {},
+    }).then((r) => {
+      if (!r.ok) throw new Error(`API ${r.status}`);
+    }),
+  testChannel: (id: string) =>
+    apiFetch(`/api/v1/notifications/${id}/test`, { method: "POST" }),
   occupancy: (cameraId: string) =>
     apiFetch<OccupancyStats>(`/api/v1/cameras/${cameraId}/occupancy`),
   kpis: (cameraId: string | null, since: Date, until: Date, bucket: string) => {

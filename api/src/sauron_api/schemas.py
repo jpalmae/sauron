@@ -104,3 +104,4 @@ class BrandingRead(BaseModel):
     accent_color: str
     support_url: str
     auth_required: bool = False
+    sso_providers: list[str] = []

@@ -21,6 +21,7 @@ class EventType(StrEnum):
     ALPR = "ALPR"
     ALPR_WATCHLIST = "ALPR_WATCHLIST"
     CAMERA_OFFLINE = "CAMERA_OFFLINE"
+    CAMERA_ONLINE = "CAMERA_ONLINE"
 
 
 class Priority(StrEnum):

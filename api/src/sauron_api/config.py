@@ -55,6 +55,21 @@ class Settings(BaseSettings):
     vapid_public_key: str = ""
     vapid_contact: str = "mailto:admin@sauron.local"
 
+    # SSO via OIDC (MS365 / Google Workspace). JSON con proveedores:
+    # {"microsoft": {"issuer": "https://login.microsoftonline.com/<tenant>/v2.0",
+    #                "client_id": "...", "client_secret": "..."},
+    #  "google": {"issuer": "https://accounts.google.com",
+    #             "client_id": "...", "client_secret": "..."}}
+    oidc_providers_json: str = ""
+    # Base URL pública del API para el redirect_uri del callback OIDC.
+    oidc_redirect_base: str = "http://localhost:8080"
+    # Dominios de email permitidos (vacío = todos). Separados por coma.
+    oidc_allowed_domains: str = ""
+
+    # Data retention
+    retention_days: int = 90  # TimescaleDB retention policy on analytics_events
+    s3_retention_days: int = 90  # MinIO lifecycle on snapshots/clips (0 = disabled)
+
 
 _settings: Settings | None = None
 _branding: BrandingSettings | None = None
