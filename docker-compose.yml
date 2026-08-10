@@ -24,7 +24,7 @@ services:
               capabilities: [gpu, video]
     volumes:
       - ./inference/configs:/app/configs:ro
-      - models:/app/models:ro
+      - models:/app/models
     ports:
       - "9100:9100" # prometheus metrics + healthz
     healthcheck:

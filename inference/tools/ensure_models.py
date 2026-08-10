@@ -30,12 +30,19 @@ def models_in_use(config_path: str) -> set[str]:
 def copy_baked(models_dir: Path) -> None:
     if not BAKED_DIR.is_dir():
         return
-    models_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        models_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        print(f"warning: cannot create {models_dir}: {e}", file=sys.stderr)
+        return
     for onnx in BAKED_DIR.glob("*.onnx"):
         dst = models_dir / onnx.name
         if not dst.exists():
-            shutil.copy2(onnx, dst)
-            print(f"baked model -> {dst}")
+            try:
+                shutil.copy2(onnx, dst)
+                print(f"baked model -> {dst}")
+            except OSError as e:
+                print(f"warning: cannot copy {onnx.name} to {dst}: {e} (using baked path)", file=sys.stderr)
 
 
 def ensure_engines(models_dir: Path, names: set[str], int8: bool, calib_data: str | None) -> None:
@@ -47,6 +54,9 @@ def ensure_engines(models_dir: Path, names: set[str], int8: bool, calib_data: st
         onnx = models_dir / info.onnx_file
         if engine.exists():
             continue
+        # fallback to baked ONNX if volume copy failed / model not yet copied
+        if not onnx.exists() and (BAKED_DIR / info.onnx_file).exists():
+            onnx = BAKED_DIR / info.onnx_file
         if not onnx.exists():
             raise SystemExit(f"missing ONNX for {name}: {onnx} (image should bake it)")
         print(f"building {engine.name} from {onnx.name} (first boot, takes a few minutes)…")
