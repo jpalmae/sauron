@@ -70,6 +70,7 @@ services:
       SAURON_OIDC_PROVIDERS_JSON: ${OIDC_PROVIDERS_JSON:-}
       SAURON_OIDC_REDIRECT_BASE: ${OIDC_REDIRECT_BASE:-http://localhost:8080}
       SAURON_OIDC_ALLOWED_DOMAINS: ${OIDC_ALLOWED_DOMAINS:-}
+      SAURON_LIVE_GO2RTC_ENABLED: "true"
     ports:
       - "8000:8000"
     depends_on:
@@ -93,6 +94,17 @@ services:
       - ./brand:/usr/share/nginx/html/brand:ro
     depends_on:
       - api
+
+  go2rtc:
+    image: alexxit/go2rtc:latest
+    restart: unless-stopped
+    volumes:
+      - ./deploy/go2rtc:/config
+    ports:
+      - "1984:1984"   # WebUI + API
+      - "8554:8554"   # RTSP
+      - "8555:8555"
+      - "8555:8555/udp"
 
   # Optional RTSP -> WebRTC gateway for the live grid (WHEP players).
   # Add each camera as a path in mediamtx.yml and enable with:

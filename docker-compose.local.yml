@@ -43,20 +43,4 @@ services:
         condition: service_healthy
     command: ["run", "-c", "configs/pipeline.local.yaml"]
 
-  # go2rtc: bridges cloud cameras (Xiaomi/Mi Home, etc.) into standard RTSP so
-  # Sauron can ingest them; its WHEP endpoint powers the in-browser live preview.
-  # Default: bridge network. If your camera needs host-level P2P (e.g. Xiaomi
-  # UDP), switch this service to `network_mode: host` and have the inference
-  # service reach it via the host IP (host.docker.internal:host-gateway).
-  go2rtc:
-    image: alexxit/go2rtc:latest
-    profiles: ["local"]
-    container_name: sauron-go2rtc
-    restart: unless-stopped
-    volumes:
-      - ./deploy/go2rtc:/config
-    ports:
-      - "1984:1984"   # WebUI + API (login cloud account here)
-      - "8554:8554"   # RTSP (consumed by inference)
-      - "8555:8555"       # WebRTC media (live preview)
-      - "8555:8555/udp"
+  # go2rtc config is shared via ./deploy/go2rtc (see main compose)
