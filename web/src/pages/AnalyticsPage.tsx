@@ -15,8 +15,10 @@ import {
   YAxis,
 } from "recharts";
 import { api, type Camera, type KpiRow } from "../lib/api";
+import { DOMAIN_LABEL, filterCamerasByDomain } from "../lib/domain";
 import { CLASS_LABELS } from "../lib/format";
 import { congestionSeries, pivotCounts, speedSeries } from "../lib/kpis";
+import OccupancyWidget from "../components/OccupancyWidget";
 
 const CLASS_COLORS: Record<string, string> = {
   car: "oklch(0.78 0.13 165)",
@@ -49,12 +51,13 @@ function ChartCard({ title, children }: { title: string; children: React.ReactNo
   );
 }
 
-export default function AnalyticsPage() {
+export default function AnalyticsPage({ domain }: { domain?: "traffic" | "people" } = {}) {
   const [cameras, setCameras] = useState<Camera[]>([]);
   const [cameraId, setCameraId] = useState<string | null>(null);
   const [rangeIdx, setRangeIdx] = useState(0);
   const [rows, setRows] = useState<KpiRow[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const isPeople = domain === "people";
 
   const range = RANGES[rangeIdx];
 
@@ -63,6 +66,7 @@ export default function AnalyticsPage() {
   }, []);
 
   useEffect(() => {
+    if (isPeople) return;
     const until = new Date();
     const since = new Date(until.getTime() - range.hours * 3600_000);
     setError(null);
@@ -73,11 +77,34 @@ export default function AnalyticsPage() {
         setRows([]);
         setError(String(e));
       });
-  }, [cameraId, range]);
+  }, [cameraId, range, isPeople]);
 
   const counts = useMemo(() => pivotCounts(rows, range.bucket), [rows, range.bucket]);
   const speeds = useMemo(() => speedSeries(rows, range.bucket), [rows, range.bucket]);
   const congestion = useMemo(() => congestionSeries(rows, range.bucket), [rows, range.bucket]);
+  const filteredCameras = useMemo(() => (domain ? filterCamerasByDomain(cameras, domain) : cameras), [cameras, domain]);
+
+  if (isPeople) {
+    return (
+      <div className="space-y-4 p-5">
+        <h1 className="font-display text-xl font-semibold">Analítica de personas</h1>
+        {filteredCameras.length === 0 ? (
+          <p className="text-sm text-dim">
+            Sin cámaras de personas configuradas. Añade una cámara con detector de personas en <span className="text-mut">Cámaras</span>.
+          </p>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2">
+            {filteredCameras.map((c) => (
+              <OccupancyWidget key={c.id} cameraId={c.id} name={c.name} />
+            ))}
+          </div>
+        )}
+        <p className="text-xs text-dim">
+          Métricas de ocupación, postura y sillas provienen de los eventos de personas. Usa <span className="font-mono text-mut">Eventos · Personas</span> para el histórico.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4 p-5">
@@ -89,8 +116,8 @@ export default function AnalyticsPage() {
             onChange={(e) => setCameraId(e.target.value || null)}
             className="rounded-md border border-line bg-panel px-3 py-1.5 text-sm"
           >
-            <option value="">Todas las cámaras</option>
-            {cameras.map((c) => (
+            <option value="">{domain ? `Todas (${DOMAIN_LABEL[domain!]})` : "Todas las cámaras"}</option>
+            {(domain ? filteredCameras : cameras).map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
               </option>

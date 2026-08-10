@@ -2,6 +2,7 @@ import { Pencil, Plus, Route, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, type Camera } from "../lib/api";
+import { DOMAIN_COLOR, DOMAIN_DOT, DOMAIN_LABEL, filterCamerasByDomain, getCameraDomain, type Domain } from "../lib/domain";
 
 interface Draft {
   name: string;
@@ -82,6 +83,8 @@ export default function CamerasPage() {
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [domainFilter, setDomainFilter] = useState<Domain | null>(null);
+  const filteredCameras = domainFilter ? filterCamerasByDomain(cameras, domainFilter) : cameras;
 
   const reload = () => api.cameras().then(setCameras).catch(console.error);
   useEffect(() => {
@@ -97,8 +100,19 @@ export default function CamerasPage() {
 
   return (
     <div className="space-y-4 p-5">
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <h1 className="font-display text-xl font-semibold">Cámaras</h1>
+        <div className="flex overflow-hidden rounded-md border border-line">
+          {([null, "traffic", "people"] as const).map((d) => (
+            <button
+              key={String(d)}
+              onClick={() => setDomainFilter(d)}
+              className={`px-3 py-1.5 text-xs ${domainFilter === d ? "bg-raised text-ink" : "text-mut hover:text-ink"}`}
+            >
+              {d === null ? "Todas" : d === "traffic" ? "Tráfico" : "Personas"}
+            </button>
+          ))}
+        </div>
         <button
           onClick={() => setCreating(true)}
           className="ml-auto flex items-center gap-1.5 rounded-md bg-brand px-3 py-1.5 text-sm font-medium text-white"
@@ -127,6 +141,7 @@ export default function CamerasPage() {
             <tr className="border-b border-line bg-panel text-left font-mono text-[11px] uppercase tracking-wider text-mut">
               <th className="px-4 py-2.5">Nombre</th>
               <th className="px-4 py-2.5">stream_id</th>
+              <th className="px-4 py-2.5">Dominio</th>
               <th className="px-4 py-2.5">ROI</th>
               <th className="px-4 py-2.5">Backend / Modelo</th>
               <th className="px-4 py-2.5">Estado</th>
@@ -134,15 +149,23 @@ export default function CamerasPage() {
             </tr>
           </thead>
           <tbody>
-            {cameras.map((c) => [
-              <tr key={c.id} className="border-b border-line/50">
-                <td className="px-4 py-2.5 font-medium">{c.name}</td>
-                <td className="px-4 py-2.5 font-mono text-xs text-mut">{c.stream_id}</td>
-                <td className="px-4 py-2.5 font-mono text-xs text-mut">
-                  {c.roi_config
-                    ? `${c.roi_config.lines?.length ?? 0} líneas · ${c.roi_config.polygons?.length ?? 0} polígonos`
-                    : "sin configurar"}
-                </td>
+            {filteredCameras.map((c) => {
+              const d = getCameraDomain(c);
+              return [
+                <tr key={c.id} className="border-b border-line/50">
+                  <td className="px-4 py-2.5 font-medium">{c.name}</td>
+                  <td className="px-4 py-2.5 font-mono text-xs text-mut">{c.stream_id}</td>
+                  <td className="px-4 py-2.5">
+                    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 font-mono text-[10px] ${DOMAIN_COLOR[d]}`}>
+                      <span className={`h-1.5 w-1.5 rounded-full ${DOMAIN_DOT[d]}`} />
+                      {DOMAIN_LABEL[d]}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2.5 font-mono text-xs text-mut">
+                    {c.roi_config
+                      ? `${c.roi_config.lines?.length ?? 0} líneas · ${c.roi_config.polygons?.length ?? 0} polígonos`
+                      : "sin configurar"}
+                  </td>
                 <td className="px-4 py-2.5">
                   <div className="flex gap-1.5">
                     <select
@@ -235,7 +258,7 @@ export default function CamerasPage() {
               </tr>,
               editing === c.id && (
                 <tr key={`${c.id}-edit`} className="border-b border-line/50 bg-panel/60">
-                  <td colSpan={6} className="px-4 py-3">
+                  <td colSpan={7} className="px-4 py-3">
                     <CameraForm
                       initial={{ name: c.name, stream_id: c.stream_id, rtsp_url: c.rtsp_url }}
                       onSave={async (d) => {
@@ -247,13 +270,16 @@ export default function CamerasPage() {
                     />
                   </td>
                 </tr>
-              ),
-            ])}
+              )
+              ];
+            })}
           </tbody>
         </table>
-        {cameras.length === 0 && (
+        {filteredCameras.length === 0 && (
           <p className="px-4 py-10 text-center text-sm text-mut">
-            Aún no hay cámaras. Crea la primera para comenzar.
+            {cameras.length === 0
+              ? "Aún no hay cámaras. Crea la primera para comenzar."
+              : `Sin cámaras de ${domainFilter === "traffic" ? "tráfico" : "personas"}. Cambia el filtro o crea una.`}
           </p>
         )}
       </div>

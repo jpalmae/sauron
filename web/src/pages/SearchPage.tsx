@@ -2,16 +2,21 @@ import { Search } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, type Camera, type EventItem } from "../lib/api";
+import { isPeopleEvent, isTrafficEvent, type Domain } from "../lib/domain";
 import { EVENT_LABELS, SEVERITY_CLASSES, fmtDateTime } from "../lib/format";
 
 export default function SearchPage() {
   const [cameras, setCameras] = useState<Camera[]>([]);
   const [cameraId, setCameraId] = useState<string | null>(null);
+  const [domain, setDomain] = useState<Domain | null>(null);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<{ distance: number; event: EventItem }[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [searched, setSearched] = useState(false);
+  const filteredResults = domain
+    ? results.filter((r) => (domain === "traffic" ? isTrafficEvent(r.event) : isPeopleEvent(r.event)))
+    : results;
 
   useEffect(() => {
     api.cameras().then(setCameras).catch(console.error);
@@ -47,6 +52,18 @@ export default function SearchPage() {
             className="w-full rounded-md border border-line bg-panel py-2 pl-9 pr-3 text-sm"
           />
         </div>
+        <div className="flex overflow-hidden rounded-md border border-line">
+          {([null, "traffic", "people"] as const).map((d) => (
+            <button
+              key={String(d)}
+              type="button"
+              onClick={() => setDomain(d)}
+              className={`px-3 py-2 text-xs ${domain === d ? "bg-raised text-ink" : "text-mut hover:text-ink"}`}
+            >
+              {d === null ? "Todo" : d === "traffic" ? "Tráfico" : "Personas"}
+            </button>
+          ))}
+        </div>
         <select
           value={cameraId ?? ""}
           onChange={(e) => setCameraId(e.target.value || null)}
@@ -74,15 +91,14 @@ export default function SearchPage() {
         </p>
       )}
 
-      {searched && results.length === 0 && !error && (
+      {searched && filteredResults.length === 0 && !error && (
         <p className="text-sm text-mut">
-          Sin resultados con evidencia indexada. Los embeddings se generan al ingerir eventos
-          con snapshot (CLIP).
+          Sin resultados{domain ? ` en ${domain === "traffic" ? "tráfico" : "personas"}` : ""} con evidencia indexada.
         </p>
       )}
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
-        {results.map(({ distance, event }) => (
+        {filteredResults.map(({ distance, event }) => (
           <Link
             to="/events"
             key={event.event_id}

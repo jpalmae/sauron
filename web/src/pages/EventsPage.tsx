@@ -13,8 +13,11 @@ import {
   SEVERITY_CLASSES,
   fmtDateTime,
 } from "../lib/format";
+import { filterEventsByDomain, type Domain } from "../lib/domain";
 
-const EVENT_TYPES = ["LINE_CROSSING", "STOPPED_VEHICLE", "OBSTRUCTION", "WRONG_WAY", "CONGESTION"];
+const TRAFFIC_TYPES = ["LINE_CROSSING", "STOPPED_VEHICLE", "OBSTRUCTION", "WRONG_WAY", "CONGESTION", "ALPR", "ALPR_WATCHLIST", "TRAVEL_TIME", "CAMERA_OFFLINE", "CAMERA_ONLINE", "AUDIO_ANOMALY"];
+const PEOPLE_TYPES = ["OCCUPANCY", "CHAIR_OCCUPANCY", "GROUPING", "FALL"];
+const EVENT_TYPES = [...TRAFFIC_TYPES, ...PEOPLE_TYPES];
 
 function Evidence({
   event,
@@ -67,7 +70,7 @@ function Evidence({
   );
 }
 
-export default function EventsPage() {
+export default function EventsPage({ domain }: { domain?: Domain }) {
   const [cameras, setCameras] = useState<Camera[]>([]);
   const [filters, setFilters] = useState<EventFilters>({});
   const [data, setData] = useState<EventPage | null>(null);
@@ -109,10 +112,15 @@ export default function EventsPage() {
     api.setFeedback(eventId, value).catch(console.error);
   };
 
+  const visibleTypes = domain === "traffic" ? TRAFFIC_TYPES : domain === "people" ? PEOPLE_TYPES : EVENT_TYPES;
+  const displayItems = domain && data ? filterEventsByDomain(data.items, domain) : data?.items;
+
   return (
     <div className="space-y-4 p-5">
       <div className="flex flex-wrap items-center gap-3">
-        <h1 className="font-display text-xl font-semibold">Eventos</h1>
+        <h1 className="font-display text-xl font-semibold">
+          Eventos{domain ? ` · ${domain === "traffic" ? "Tráfico" : "Personas"}` : ""}
+        </h1>
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <select
             value={filters.camera_id ?? ""}
@@ -138,9 +146,9 @@ export default function EventsPage() {
             className="rounded-md border border-line bg-panel px-3 py-1.5 text-sm"
           >
             <option value="">Todos los tipos</option>
-            {EVENT_TYPES.map((t) => (
+            {visibleTypes.map((t) => (
               <option key={t} value={t}>
-                {EVENT_LABELS[t]}
+                {EVENT_LABELS[t] ?? t}
               </option>
             ))}
           </select>
@@ -202,7 +210,7 @@ export default function EventsPage() {
             </tr>
           </thead>
           <tbody>
-            {data?.items.map((e) => {
+            {(displayItems ?? []).map((e) => {
               const cls = String(e.metadata?.vehicle_class ?? "");
               const isOpen = expanded === e.event_id;
               return [

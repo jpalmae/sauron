@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { MapContainer, Marker, Popup, TileLayer } from "react-leaflet";
 import { Link } from "react-router-dom";
 import { api, type Camera, type EventItem } from "../lib/api";
+import { getCameraDomain, type Domain } from "../lib/domain";
 import { EVENT_LABELS, SEVERITY_DOT, relTime } from "../lib/format";
 
 function markerIcon(color: string): L.DivIcon {
@@ -21,6 +22,7 @@ const COLOR = { ok: "#34d399", warn: "#fbbf24", crit: "#f87171" };
 export default function MapPage() {
   const [cameras, setCameras] = useState<Camera[]>([]);
   const [latest, setLatest] = useState<Record<string, EventItem>>({});
+  const [domainFilter, setDomainFilter] = useState<Domain | null>(null);
 
   useEffect(() => {
     api.cameras().then(setCameras).catch(console.error);
@@ -37,26 +39,40 @@ export default function MapPage() {
   }, []);
 
   const located = cameras.filter((c) => c.latitude !== null && c.longitude !== null);
+  const filteredLocated = domainFilter ? located.filter((c) => getCameraDomain(c) === domainFilter) : located;
   const center = useMemo<[number, number]>(() => {
-    if (located.length === 0) return [0, 0];
-    const lat = located.reduce((s, c) => s + (c.latitude ?? 0), 0) / located.length;
-    const lon = located.reduce((s, c) => s + (c.longitude ?? 0), 0) / located.length;
+    if (filteredLocated.length === 0) return located.length === 0 ? [0, 0] : [located[0].latitude!, located[0].longitude!];
+    const lat = filteredLocated.reduce((s, c) => s + (c.latitude ?? 0), 0) / filteredLocated.length;
+    const lon = filteredLocated.reduce((s, c) => s + (c.longitude ?? 0), 0) / filteredLocated.length;
     return [lat, lon];
-  }, [located]);
+  }, [filteredLocated, located]);
 
   return (
     <div className="flex h-full flex-col p-5">
-      <div className="mb-3 flex items-baseline gap-3">
+      <div className="mb-3 flex flex-wrap items-center gap-3">
         <h1 className="font-display text-xl font-semibold">Mapa</h1>
         <span className="font-mono text-xs text-mut">
-          {located.length}/{cameras.length} cámaras georreferenciadas
+          {filteredLocated.length}/{cameras.length} visibles
         </span>
+        <div className="ml-auto flex overflow-hidden rounded-md border border-line">
+          {([null, "traffic", "people"] as const).map((d) => (
+            <button
+              key={String(d)}
+              onClick={() => setDomainFilter(d)}
+              className={`px-3 py-1 text-xs ${domainFilter === d ? "bg-raised text-ink" : "text-mut hover:text-ink"}`}
+            >
+              {d === null ? "Todo" : d === "traffic" ? "Tráfico" : "Personas"}
+            </button>
+          ))}
+        </div>
       </div>
       <div className="min-h-0 flex-1 overflow-hidden rounded-lg border border-line">
-        {located.length === 0 ? (
+        {filteredLocated.length === 0 ? (
           <div className="grid h-full place-items-center text-sm text-mut">
             <p className="max-w-sm text-center">
-              Asigna latitud/longitud a tus cámaras (Cámaras → editar) para verlas en el mapa.
+              {located.length === 0
+                ? "Asigna latitud/longitud a tus cámaras (Cámaras → editar) para verlas en el mapa."
+                : "Sin cámaras de este dominio en el mapa."}
             </p>
           </div>
         ) : (
@@ -65,7 +81,7 @@ export default function MapPage() {
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             />
-            {located.map((cam) => {
+            {filteredLocated.map((cam) => {
               const last = latest[cam.id];
               const color =
                 last?.priority === "critical"
