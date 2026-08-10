@@ -49,7 +49,11 @@ def build_engine(
         except AttributeError:
             has_fp16 = True
         if has_fp16:
-            config.set_flag(trt.BuilderFlag.FP16)
+            try:
+                config.set_flag(trt.BuilderFlag.FP16)
+            except AttributeError:
+                # TRT 10+ removed FP16 flag; FP16 is automatic
+                pass
     if int8:
         try:
             has_int8 = builder.platform_has_fast_int8
@@ -59,7 +63,10 @@ def build_engine(
             raise SystemExit("platform has no fast INT8")
         if not calib_data:
             raise SystemExit("INT8 requires --calib-data (dir with calibration frames)")
-        config.set_flag(trt.BuilderFlag.INT8)
+        try:
+            config.set_flag(trt.BuilderFlag.INT8)
+        except AttributeError:
+            pass  # TRT 11: INT8 enabled via calibrator
         config.int8_calibrator = ImageCalibrator(calib_data, imgsz)
 
     serialized = builder.build_serialized_network(network, config)
