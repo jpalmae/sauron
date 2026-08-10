@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
-from ..config import ThresholdsConfig
+from ..config import DefaultsConfig, ThresholdsConfig
 from ..types import Frame, TrackedObject
 from .events import Event
 from .speed import SpeedEstimator
@@ -15,6 +15,7 @@ class RuleContext:
     fps: int
     thresholds: ThresholdsConfig
     speed_estimator: SpeedEstimator | None = None
+    defaults: DefaultsConfig | None = None
 
 
 class Rule(ABC):

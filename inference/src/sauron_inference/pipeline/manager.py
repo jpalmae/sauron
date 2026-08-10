@@ -201,7 +201,7 @@ class PipelineManager:
         detector = self._detector_factory(stream, self.cfg, device_id)
         tracker = BYTETracker(self.cfg.defaults.tracker, frame_rate=stream.target_fps)
         engine = (
-            RulesEngine(stream.id, stream.roi, fps=stream.target_fps)
+            RulesEngine(stream.id, stream.roi, fps=stream.target_fps, defaults=self.cfg.defaults)
             if stream.roi
             else None
         )

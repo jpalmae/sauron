@@ -12,13 +12,9 @@ from .geometry import point_in_polygon
 class GroupingRule(Rule):
     """Gathering detection: clusters of people close together in the zone.
 
-    Emits a GROUPING event when one or more clusters of at least ``MIN_PEOPLE``
-    people (within ``DISTANCE_PX`` of each other) are present. Useful for
-    "a meeting/reunion of N people is happening".
+    Thresholds (min people, distance) are read from ctx.defaults so they are
+    GUI-tunable via the engine config.
     """
-
-    MIN_PEOPLE = 3
-    DISTANCE_PX = 220.0
 
     def __init__(self, cfg: PolygonConfig) -> None:
         self.cfg = cfg
@@ -27,7 +23,7 @@ class GroupingRule(Rule):
         self._last_emit: float = float("-inf")
 
     @staticmethod
-    def _clusters(centroids: list[tuple[float, float]]) -> list[list[int]]:
+    def _clusters(centroids: list[tuple[float, float]], distance_px: float) -> list[list[int]]:
         n = len(centroids)
         if n == 0:
             return []
@@ -39,7 +35,7 @@ class GroupingRule(Rule):
                 i = parent[i]
             return i
 
-        d2 = GroupingRule.DISTANCE_PX ** 2
+        d2 = distance_px ** 2
         for i in range(n):
             xi, yi = centroids[i]
             for j in range(i + 1, n):
@@ -51,20 +47,19 @@ class GroupingRule(Rule):
             groups.setdefault(find(i), []).append(i)
         return list(groups.values())
 
-    def process(
-        self, frame: Frame, tracks: list[TrackedObject], ctx: RuleContext
-    ) -> list[Event]:
+    def process(self, frame: Frame, tracks: list[TrackedObject], ctx: RuleContext) -> list[Event]:
+        d = ctx.defaults
+        min_people = getattr(d, "grouping_min_people", 3) if d else 3
+        distance_px = getattr(d, "grouping_distance_px", 220.0) if d else 220.0
+
         now = frame.timestamp
         if now - self._last_emit < ctx.thresholds.occupancy_interval_s:
             return []
         self._last_emit = now
 
-        inside = [
-            t for t in tracks
-            if t.class_name == "person" and point_in_polygon(t.centroid, self._polygon)
-        ]
-        clusters = self._clusters([t.centroid for t in inside])
-        big = [len(c) for c in clusters if len(c) >= self.MIN_PEOPLE]
+        inside = [t for t in tracks if t.class_name == "person" and point_in_polygon(t.centroid, self._polygon)]
+        clusters = self._clusters([t.centroid for t in inside], distance_px)
+        big = [len(c) for c in clusters if len(c) >= min_people]
         if not big:
             return []
 

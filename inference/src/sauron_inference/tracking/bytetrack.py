@@ -123,7 +123,15 @@ class STrack:
         self.frame_id = frame_id
         self.tracklet_len += 1
         self.history.append(self.centroid)
-        self.keypoints = det.keypoints
+        # class: "person" (0) is sticky — an object misdetection (e.g. a
+        # person read as laptop) must not downgrade a person track.
+        if det.class_id == 0 or self.class_id != 0:
+            self.class_name = det.class_name
+            self.class_id = det.class_id
+        # keypoints: keep the last valid pose skeleton; object detections
+        # have none and must not clear a person's skeleton.
+        if det.keypoints is not None:
+            self.keypoints = det.keypoints
 
     def mark_lost(self) -> None:
         self.state = TrackState.LOST

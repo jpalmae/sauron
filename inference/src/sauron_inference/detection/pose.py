@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import cv2
@@ -9,12 +10,18 @@ from ..types import Detection
 from .base import Detector
 from .yolo_postprocess import letterbox, postprocess_yolo_pose
 
+# Torso keypoints (COCO): left/right shoulder (5,6) + left/right hip (11,12).
+# A real person shows a valid torso; jackets/backpacks/blobs don't, so this
+# gate drops false "person" detections that would clutter analytics + overlay.
+_TORSO_KP = (5, 6, 11, 12)
+
 
 class OnnxPoseDetector(Detector):
     """YOLOv8-pose ONNX on CPU via OpenCV DNN.
 
     Returns person detections carrying 17 COCO keypoints, so downstream rules
     can classify posture (sitting/standing) and track per-person transitions.
+    Detections without a credible torso are dropped (jackets, backpacks, blobs).
     """
 
     def __init__(
@@ -33,6 +40,18 @@ class OnnxPoseDetector(Detector):
         self.conf_threshold = conf_threshold
         self.nms_threshold = nms_threshold
         self.classes = classes or {0: "person"}
+        # Pose-quality gate (tunable without code changes)
+        self.min_torso_conf = float(os.environ.get("SAURON_POSE_MIN_TORSO_CONF", "0.30"))
+        self.min_torso_points = int(os.environ.get("SAURON_POSE_MIN_TORSO_POINTS", "2"))
+
+    def _is_real_person(self, kp: np.ndarray | None) -> bool:
+        if kp is None:
+            return False
+        try:
+            ok = sum(1 for i in _TORSO_KP if float(kp[i][2]) >= self.min_torso_conf)
+            return ok >= self.min_torso_points
+        except Exception:
+            return False
 
     def detect(self, image: np.ndarray) -> list[Detection]:
         padded, scale, pad = letterbox(image, self.input_size)
@@ -49,6 +68,8 @@ class OnnxPoseDetector(Detector):
         )
         detections: list[Detection] = []
         for box, score, kp in results:
+            if not self._is_real_person(kp):
+                continue  # drop jackets / backpacks / blobs without a real torso
             detections.append(
                 Detection(
                     bbox=box,

@@ -76,6 +76,14 @@ class DefaultsConfig(BaseModel):
     classes: dict[int, str] = Field(
         default_factory=lambda: {2: "car", 3: "motorcycle", 5: "bus", 7: "truck"}
     )
+    # Rule thresholds (GUI-tunable via engine config)
+    fall_aspect: float = 1.3
+    fall_cooldown_s: float = 20.0
+    knee_bend_deg: float = 140.0
+    posture_stable_frames: int = 4
+    reid_sim: float = 0.55
+    grouping_min_people: int = 3
+    grouping_distance_px: float = 220.0
     tracker: TrackerConfig = Field(default_factory=TrackerConfig)
     capture: CaptureConfig = Field(default_factory=CaptureConfig)
     clips: ClipConfig = Field(default_factory=ClipConfig)
