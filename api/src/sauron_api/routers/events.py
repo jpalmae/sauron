@@ -4,6 +4,7 @@ import uuid
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -122,3 +123,27 @@ async def ack_event(
         acknowledged_at=row.acknowledged_at,
         acknowledged_by=row.acknowledged_by,
     )
+
+
+class FeedbackRequest(BaseModel):
+    value: str  # correct | false_positive
+
+
+@router.post("/{event_id}/feedback", status_code=204)
+async def set_feedback(
+    event_id: uuid.UUID,
+    payload: FeedbackRequest,
+    session: AsyncSession = Depends(get_session),
+    _: User = Depends(get_current_user),
+):
+    """Operator verdict on an event (feeds the model improvement loop)."""
+    if payload.value not in ("correct", "false_positive"):
+        raise HTTPException(422, "value must be 'correct' or 'false_positive'")
+    result = await session.execute(
+        select(AnalyticsEvent).where(AnalyticsEvent.event_id == event_id).limit(1)
+    )
+    row = result.scalar_one_or_none()
+    if row is None:
+        raise HTTPException(404, "event not found")
+    row.feedback = payload.value
+    await session.commit()

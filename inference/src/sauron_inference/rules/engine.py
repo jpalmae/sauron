@@ -34,6 +34,7 @@ class RulesEngine:
 
     def __init__(self, camera_id: str, roi: ROIConfig, fps: int = 15) -> None:
         self.camera_id = camera_id
+        self.privacy = roi.privacy
         speed = SpeedEstimator(roi.homography) if roi.homography else None
         self.ctx = RuleContext(
             camera_id=camera_id, fps=fps, thresholds=roi.thresholds, speed_estimator=speed
@@ -66,8 +67,33 @@ class RulesEngine:
         for rule in self.rules:
             events.extend(rule.process(frame, tracks, self.ctx))
         if events:
-            snapshot = frame.image.copy()
+            self._attach_signatures(events, frame, tracks)
+            if self.privacy is not None:
+                from .privacy import redact_frame
+
+                snapshot = redact_frame(frame.image, tracks, self.privacy)
+            else:
+                snapshot = frame.image.copy()
             for e in events:
                 if e.snapshot is None:
                     e.snapshot = snapshot
         return events
+
+    @staticmethod
+    def _attach_signatures(
+        events: list[Event], frame: Frame, tracks: list[TrackedObject]
+    ) -> None:
+        """Appearance signature on line-crossing events (multi-camera ReID)."""
+        from .events import EventType
+        from .signature import hsv_signature
+
+        by_id = {t.object_id: t for t in tracks}
+        for e in events:
+            if e.event_type != EventType.LINE_CROSSING or e.object_id is None:
+                continue
+            track = by_id.get(e.object_id)
+            if track is None:
+                continue
+            sig = hsv_signature(frame.image, track.bbox)
+            if sig:
+                e.metadata["signature"] = sig

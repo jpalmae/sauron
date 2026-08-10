@@ -165,6 +165,22 @@ export const api = {
   },
   ackEvent: (eventId: string) =>
     apiFetch<EventItem>(`/api/v1/events/${eventId}/ack`, { method: "POST" }),
+  setFeedback: (eventId: string, value: "correct" | "false_positive") =>
+    fetch(`${BASE}/api/v1/events/${eventId}/feedback`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(auth.token() ? { Authorization: `Bearer ${auth.token()}` } : {}),
+      },
+      body: JSON.stringify({ value }),
+    }).then((r) => {
+      if (!r.ok) throw new Error(`API ${r.status}`);
+    }),
+  datasetUrl: (feedback: string, cameraId?: string) => {
+    const params = new URLSearchParams({ feedback });
+    if (cameraId) params.set("camera_id", cameraId);
+    return `/api/v1/reports/dataset.zip?${params}`;
+  },
   liveUrl: (streamId: string) =>
     apiFetch<{ kind: "hls" | "whep" | "none"; url: string }>(
       `/api/v1/streams/${streamId}/live-url`,

@@ -170,3 +170,59 @@ async def kpis_csv(
     buf.seek(0)
     headers = {"Content-Disposition": 'attachment; filename="kpis.csv"'}
     return StreamingResponse(iter([buf.read()]), media_type="text/csv", headers=headers)
+
+
+@router.get("/dataset.zip")
+async def dataset_zip(
+    session: AsyncSession = Depends(get_session),
+    _: User = Depends(get_current_user),
+    camera_id: uuid.UUID | None = None,
+    feedback: str | None = None,
+    limit: int = Query(500, le=2000),
+):
+    """YOLO dataset zip from reviewed events (model improvement loop).
+
+    - feedback=false_positive -> images with EMPTY label files (hard negatives)
+    - otherwise -> labels from metadata.bbox + vehicle_class/person
+    """
+    import zipfile  # noqa: F401 (used by builder)
+
+    from ..dataset import build_dataset_zip, yolo_label
+
+    class_ids = {"car": 0, "motorcycle": 1, "bus": 2, "truck": 3, "person": 4}
+
+    query = (
+        select(AnalyticsEvent)
+        .where(AnalyticsEvent.snapshot_key.is_not(None))
+        .order_by(AnalyticsEvent.timestamp.desc())
+        .limit(limit)
+    )
+    if camera_id:
+        query = query.where(AnalyticsEvent.camera_id == camera_id)
+    if feedback:
+        query = query.where(AnalyticsEvent.feedback == feedback)
+    else:
+        query = query.where(AnalyticsEvent.feedback.is_not(None))
+    rows = list((await session.execute(query)).scalars().all())
+
+    storage = get_storage()
+    items: list[tuple[bytes, str]] = []
+    for row in rows:
+        data = await storage.download_bytes(row.snapshot_key)
+        if not data:
+            continue
+        if row.feedback == "false_positive":
+            items.append((data, ""))  # hard negative
+            continue
+        meta = row.extra or {}
+        bbox = meta.get("bbox")
+        cls = meta.get("vehicle_class") or ("person" if "posture" in meta else None)
+        if bbox and cls in class_ids:
+            items.append((data, yolo_label(class_ids[cls], bbox, 1280, 720)))
+
+    content = build_dataset_zip(items)
+    return StreamingResponse(
+        iter([content]),
+        media_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="dataset.zip"'},
+    )

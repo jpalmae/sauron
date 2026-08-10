@@ -70,6 +70,26 @@ async def run_consumer(app) -> None:
                 from .notifier import notify_channels
 
                 await notify_channels(session, row, payload.camera_id)
+                if row.event_type == "LINE_CROSSING":
+                    from .matcher import maybe_create_travel_time
+
+                    travel = await maybe_create_travel_time(session, row)
+                    if travel is not None:
+                        await manager.broadcast(
+                            {
+                                "event_id": str(travel.event_id),
+                                "event_type": travel.event_type,
+                                "priority": travel.priority,
+                                "camera_id": str(travel.camera_id),
+                                "timestamp": travel.timestamp.isoformat(),
+                                "confidence": travel.confidence,
+                                "rule_id": travel.rule_id,
+                                "object_id": travel.object_id,
+                                "metadata": travel.extra,
+                                "snapshot_key": None,
+                                "clip_key": None,
+                            }
+                        )
         except asyncio.CancelledError:
             raise
         except Exception:

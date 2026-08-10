@@ -68,6 +68,7 @@ class AnalyticsEvent(Base):
         DateTime(timezone=True), nullable=True
     )
     acknowledged_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    feedback: Mapped[str | None] = mapped_column(String(20), nullable=True)
     # CLIP visual embedding (pgvector); set when embeddings are enabled
     embedding: Mapped[list[float] | None] = mapped_column(EmbeddingType, nullable=True)
 
@@ -120,6 +121,21 @@ class NotificationChannel(Base):
     camera_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("cameras.id"), nullable=True
     )
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+
+class Corridor(Base):
+    __tablename__ = "corridors"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(100))
+    from_camera_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cameras.id"))
+    to_camera_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cameras.id"))
+    distance_m: Mapped[float] = mapped_column(Float)
+    max_travel_s: Mapped[int] = mapped_column(Integer, default=7200)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)

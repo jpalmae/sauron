@@ -160,12 +160,42 @@ class AlprConfig(BaseModel):
     ocr_interval_frames: int = 10  # OCR at most every N frames per track
 
 
+class PrivacyConfig(BaseModel):
+    """Evidence redaction (snapshots + clips). Compliance: Ley 19.628 / GDPR."""
+
+    blur_faces: bool = False  # top third of person bboxes
+    blur_plates: bool = False  # lower band of vehicle bboxes
+    strength: int = 25  # gaussian kernel (odd), higher = stronger
+
+
+class PTZConfig(BaseModel):
+    """ONVIF PTZ autotracking of critical events."""
+
+    host: str
+    port: int = 80
+    username: str = ""
+    password: str = ""
+    preset_token: str | None = None  # home position after tracking
+    follow_seconds: float = 10.0
+    cooldown_s: float = 30.0
+
+
+class AudioConfig(BaseModel):
+    """Audio tap (PCM via ffmpeg) for anomaly detection (crash/bang sounds)."""
+
+    enabled: bool = False
+    sample_rate: int = 16000
+    peak_factor: float = 4.0  # RMS > baseline * factor => anomaly
+    cooldown_s: float = 20.0
+
+
 class ROIConfig(BaseModel):
     lines: list[LineConfig] = Field(default_factory=list)
     polygons: list[PolygonConfig] = Field(default_factory=list)
     homography: HomographyConfig | None = None
     thresholds: ThresholdsConfig = Field(default_factory=ThresholdsConfig)
     alpr: AlprConfig | None = None
+    privacy: PrivacyConfig | None = None
 
 
 class StreamConfig(BaseModel):
@@ -183,6 +213,8 @@ class StreamConfig(BaseModel):
     height: int = 720
     roi: ROIConfig | None = None
     detector: DetectorConfig | None = None
+    ptz: PTZConfig | None = None
+    audio: AudioConfig | None = None
 
     @field_validator("model")
     @classmethod

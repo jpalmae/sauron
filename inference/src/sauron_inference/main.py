@@ -52,8 +52,17 @@ def cmd_run(args: argparse.Namespace) -> int:
     metrics_port = int(os.environ.get("SAURON_METRICS_PORT", "9100"))
     server = start_metrics_server(manager.metrics, port=metrics_port)
     log.info("metrics on :%d (/metrics, /healthz)", metrics_port)
+
+    elector = None
+    if os.environ.get("SAURON_HA_ENABLED", "").lower() in ("1", "true", "yes"):
+        from .ha import RedisLeaderElector
+
+        redis_url = os.environ.get("SAURON_REDIS_URL") or cfg.app.redis_url or "redis://localhost:6379/0"
+        elector = RedisLeaderElector(redis_url)
+        log.info("HA enabled (leader election via %s)", redis_url)
+
     try:
-        manager.run_forever()
+        manager.run_forever(elector=elector)
     finally:
         server.shutdown()
     return 0

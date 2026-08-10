@@ -15,6 +15,7 @@ from .routers import (
     auth,
     branding,
     cameras,
+    corridors,
     events,
     kpis,
     models,
@@ -71,6 +72,7 @@ def create_app() -> FastAPI:
     app.include_router(events.router, prefix="/api/v1")
     app.include_router(kpis.router, prefix="/api/v1")
     app.include_router(models.router, prefix="/api/v1")
+    app.include_router(corridors.router, prefix="/api/v1")
     app.include_router(notifications.router, prefix="/api/v1")
     app.include_router(push.router, prefix="/api/v1")
     app.include_router(search.router, prefix="/api/v1")

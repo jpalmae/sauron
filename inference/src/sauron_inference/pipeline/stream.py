@@ -5,15 +5,20 @@ import queue
 import threading
 import time
 from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 from ..capture.base import FrameSource
 from ..detection.base import Detector
 from ..metrics import StreamMetrics
+from ..ptz import PtzController
 from ..rules.engine import RulesEngine
 from ..rules.events import Event
 from ..tracking.bytetrack import BYTETracker, STrack
 from ..types import Frame, TrackedObject
 from .clip import ClipBuffer
+
+if TYPE_CHECKING:
+    from ..audio import AudioTap
 
 log = logging.getLogger(__name__)
 
@@ -58,6 +63,7 @@ class StreamPipeline:
         clip_buffer: ClipBuffer | None = None,
         queue_size: int = 2,
         metrics: StreamMetrics | None = None,
+        ptz: PtzController | None = None,
     ) -> None:
         self.source = source
         self.detector = detector
@@ -67,6 +73,8 @@ class StreamPipeline:
         self.on_event = on_event
         self.clip_buffer = clip_buffer
         self._metrics = metrics
+        self._ptz = ptz
+        self.audio_tap: AudioTap | None = None
         self._queue: queue.Queue[Frame] = queue.Queue(maxsize=max(queue_size, 1))
         self._stop = threading.Event()
         self._capture_thread = threading.Thread(
@@ -113,7 +121,8 @@ class StreamPipeline:
                 if self._metrics is not None:
                     self._metrics.record_processed(frame.camera_id, frame, tracked)
                 if self.clip_buffer is not None:
-                    self.clip_buffer.add(frame)
+                    privacy = self.rules_engine.privacy if self.rules_engine else None
+                    self.clip_buffer.add(frame, tracked, privacy)
                 if self.rules_engine is not None:
                     events = self.rules_engine.process(frame, tracked)
                     if events and self.clip_buffer is not None:
@@ -126,6 +135,13 @@ class StreamPipeline:
                         )
                         if self._metrics is not None:
                             self._metrics.record_event(frame.camera_id)
+                        if self._ptz is not None and event.priority == "critical" and event.object_id is not None:
+                            track = next(
+                                (t for t in tracked if t.object_id == event.object_id), None
+                            )
+                            if track is not None:
+                                h, w = frame.image.shape[:2]
+                                self._ptz.track(track.centroid, (w, h))
                         if self.on_event is not None:
                             self.on_event(event)
                 if self.on_tracks is not None:

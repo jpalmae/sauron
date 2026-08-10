@@ -133,6 +133,24 @@ python inference/tools/onvif_discover.py --user admin --password secret
 # imprime un bloque streams: listo para pipeline.yaml
 ```
 
+## Features P2 (avanzado)
+
+- **Privacidad**: `roi.privacy.blur_faces/blur_plates` → redacción (blur) en
+  snapshots y clips antes de persistir (Ley 19.628 / GDPR).
+- **ReID multi-cámara / tiempo de viaje**: firmas HSV en cada `LINE_CROSSING`;
+  la API matchea contra cruces recientes de la cámara upstream del corredor
+  (`/api/v1/corridors`) → evento `TRAVEL_TIME` con `travel_time_s` y
+  `avg_speed_kmh`. Verificado en vivo: 300 s / 96 km/h.
+- **PTZ autotracking**: `stream.ptz` (ONVIF) — sigue el objeto de eventos
+  críticos por N segundos y vuelve al preset; cooldown anti-oscilación.
+- **Audio analytics**: `stream.audio.enabled` — tap PCM vía ffmpeg, detector
+  de picos RMS sobre baseline → `AUDIO_ANOMALY`.
+- **Loop de mejora**: feedback por evento (✓/falso positivo en la GUI) +
+  `GET /api/v1/reports/dataset.zip` exporta YOLO dataset (labels desde
+  metadata; falsos positivos como negativos duros) listo para fine-tuning.
+- **HA active/standby**: `SAURON_HA_ENABLED=true` + N réplicas de inference —
+  leader election por Redis (TTL 15s), takeover automático.
+
 ## Features P0 (operación)
 
 - **Notificaciones multicanal**: webhook / Telegram / email por canal con

@@ -21,6 +21,7 @@ from ..detection.pose import OnnxPoseDetector
 from ..detection.tensorrt_yolo import TensorRTYolo
 from ..metrics import StreamMetrics
 from ..models import engine_path, onnx_path
+from ..ptz import PtzController
 from ..rules.engine import RulesEngine
 from ..rules.events import Event
 from ..tracking.bytetrack import BYTETracker
@@ -128,6 +129,7 @@ class PipelineManager:
         self.metrics = StreamMetrics()
         self.camera_source = camera_source
         self.offline_seconds = offline_seconds
+        self._audio_taps: list = []
         self._stream_hashes: dict[str, str] = {}
         self._last_frame: dict[str, float] = {}
         self._processed_seen: dict[str, int] = {}
@@ -191,7 +193,7 @@ class PipelineManager:
             else None
         )
         log.info("stream %s assigned to GPU %d", stream.id, device_id)
-        return StreamPipeline(
+        pipeline = StreamPipeline(
             source=source,
             detector=detector,
             tracker=tracker,
@@ -201,7 +203,15 @@ class PipelineManager:
             clip_buffer=clip_buffer,
             queue_size=self.cfg.defaults.capture.queue_size,
             metrics=self.metrics,
+            ptz=PtzController(stream.ptz) if stream.ptz else None,
         )
+        if stream.audio is not None and stream.audio.enabled:
+            from ..audio import AudioTap
+
+            tap = AudioTap(stream.id, stream.source, stream.audio, self.on_event)
+            pipeline.audio_tap = tap
+            self._audio_taps.append(tap)
+        return pipeline
 
     def _start_one(self, stream: StreamConfig) -> None:
         try:
@@ -254,9 +264,13 @@ class PipelineManager:
             self.build()
         for p in self.pipelines:
             p.start()
+            if p.audio_tap is not None:
+                p.audio_tap.start()
         log.info("started %d stream pipelines", len(self.pipelines))
 
     def stop(self) -> None:
+        for tap in self._audio_taps:
+            tap.stop()
         for p in self.pipelines:
             p.stop()
         log.info("all pipelines stopped")
@@ -316,14 +330,22 @@ class PipelineManager:
         if self.on_event is not None:
             self.on_event(event)
 
-    def run_forever(self) -> None:
-        self.start()
-        if self.camera_source is not None:
-            self._sync_cameras()
+    def run_forever(self, elector=None) -> None:
+        if elector is None:
+            self.start()
         try:
             while True:
                 time.sleep(5)
-                if self.camera_source is not None:
+                if elector is not None:
+                    if elector.try_acquire():
+                        if not self.pipelines:
+                            log.info("leadership acquired; starting pipelines")
+                            self.start()
+                    elif self.pipelines:
+                        log.warning("standby mode; stopping pipelines")
+                        self.stop()
+                        self.pipelines = []
+                elif self.camera_source is not None:
                     interval = getattr(self.camera_source, "poll_interval", 20.0)
                     if time.monotonic() - self._last_sync >= interval:
                         self._sync_cameras()
@@ -339,6 +361,8 @@ class PipelineManager:
             log.info("shutting down")
         finally:
             self.stop()
+            if elector is not None:
+                elector.release()
             if self.camera_source is not None:
                 try:
                     self.camera_source.close()

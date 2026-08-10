@@ -8,7 +8,8 @@ from collections import deque
 import cv2
 import numpy as np
 
-from ..types import Frame
+from ..config import PrivacyConfig
+from ..types import Frame, TrackedObject
 
 log = logging.getLogger(__name__)
 
@@ -33,8 +34,18 @@ class ClipBuffer:
         self._quality = jpeg_quality
         self.clip_fps = clip_fps
 
-    def add(self, frame: Frame) -> None:
-        ok, jpeg = cv2.imencode(".jpg", frame.image, [cv2.IMWRITE_JPEG_QUALITY, self._quality])
+    def add(
+        self,
+        frame: Frame,
+        tracks: list[TrackedObject] | None = None,
+        privacy: PrivacyConfig | None = None,
+    ) -> None:
+        image = frame.image
+        if privacy is not None and tracks:
+            from ..rules.privacy import redact_frame
+
+            image = redact_frame(image, tracks, privacy)
+        ok, jpeg = cv2.imencode(".jpg", image, [cv2.IMWRITE_JPEG_QUALITY, self._quality])
         if ok:
             self._frames.append((frame.timestamp, jpeg.tobytes()))
 

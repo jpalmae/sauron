@@ -19,9 +19,11 @@ const EVENT_TYPES = ["LINE_CROSSING", "STOPPED_VEHICLE", "OBSTRUCTION", "WRONG_W
 function Evidence({
   event,
   onAck,
+  onFeedback,
 }: {
   event: EventItem;
   onAck: (id: string) => void;
+  onFeedback: (id: string, value: "correct" | "false_positive") => void;
 }) {
   return (
     <div className="space-y-2">
@@ -46,6 +48,21 @@ function Evidence({
           </button>
         )
       )}
+      <div className="flex gap-1.5 border-t border-line/50 pt-2">
+        <span className="font-mono text-[10px] text-dim">¿detección correcta?</span>
+        <button
+          onClick={() => onFeedback(event.event_id, "correct")}
+          className="rounded border border-line px-2 py-0.5 text-[11px] text-mut hover:border-info hover:text-info"
+        >
+          sí
+        </button>
+        <button
+          onClick={() => onFeedback(event.event_id, "false_positive")}
+          className="rounded border border-line px-2 py-0.5 text-[11px] text-mut hover:border-crit hover:text-crit"
+        >
+          falso positivo
+        </button>
+      </div>
     </div>
   );
 }
@@ -86,6 +103,10 @@ export default function EventsPage() {
         );
       })
       .catch(console.error);
+  };
+
+  const onFeedback = (eventId: string, value: "correct" | "false_positive") => {
+    api.setFeedback(eventId, value).catch(console.error);
   };
 
   return (
@@ -212,7 +233,7 @@ export default function EventsPage() {
                     <td colSpan={6} className="px-4 py-3">
                       <div className="flex gap-4">
                         <div className="w-72 shrink-0">
-                          <Evidence event={e} onAck={onAck} />
+                          <Evidence event={e} onAck={onAck} onFeedback={onFeedback} />
                         </div>
                         <pre className="min-w-0 flex-1 overflow-x-auto font-mono text-[11px] leading-relaxed text-mut">
                           {JSON.stringify(e.metadata, null, 2)}
