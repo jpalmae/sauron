@@ -10,13 +10,14 @@ app:
 devices: [0]
 
 defaults:
-  confidence_threshold: 0.40
+  confidence_threshold: 0.35
   nms_threshold: 0.45
   input_size: [640, 640]
+  model: yolov8s
   detector:
-    backend: pose_objects        # YOLOv8n-pose (personas) + YOLOv8n (clases abajo)
+    backend: pose_objects        # YOLOv8n-pose (personas) + YOLOv8s (clases abajo)
   pose_onnx_path: models/yolov8n-pose.onnx
-  objects_onnx_path: models/yolov8n.onnx   # o `model:` del catálogo (backend onnx)
+  objects_onnx_path: models/yolov8s.onnx   # o `model:` del catálogo (backend onnx)
   classes:                           # modelo de objetos: vehículos + sillas
     2: car
     3: motorcycle
@@ -25,7 +26,7 @@ defaults:
     62: chair
     63: couch
   tracker:
-    high_thresh: 0.40
+    high_thresh: 0.35
     low_thresh: 0.10
     match_thresh: 0.80
     max_time_lost: 30

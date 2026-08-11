@@ -21,13 +21,13 @@ from ..detection.openai_compat import OpenAICompatDetector
 from ..detection.pose import OnnxPoseDetector
 from ..detection.tensorrt_yolo import TensorRTYolo
 from ..metrics import StreamMetrics
-from ..models import engine_path, onnx_path
+from ..models import engine_path, model_imgsz, onnx_path
 from ..ptz import PtzController
 from ..rules.engine import RulesEngine
 from ..rules.events import Event
 from ..tracking.bytetrack import BYTETracker
 from .clip import ClipBuffer
-from .stream import EventCallback, NullCallback, StreamPipeline, TracksCallback
+from .stream import EventCallback, StreamPipeline, TracksCallback
 
 log = logging.getLogger(__name__)
 
@@ -55,18 +55,22 @@ def build_source(stream: StreamConfig, cfg: PipelineConfig) -> FrameSource:
 def build_detector(stream: StreamConfig, cfg: PipelineConfig, device_id: int) -> Detector:
     det_cfg = stream.resolved_detector(cfg.defaults)
     conf = stream.resolved_confidence(cfg.defaults)
+    model_name = stream.resolved_model(cfg.defaults)
+    model_size = model_imgsz(model_name)
+    input_size = (model_size, model_size)
     if det_cfg.backend == "mock":
         return MockDetector(classes=cfg.defaults.classes, conf_threshold=conf)
     if det_cfg.backend == "onnx":
         return OnnxDnnDetector(
-            onnx_path=onnx_path(stream.resolved_model(cfg.defaults)),
-            input_size=cfg.defaults.input_size,
+            onnx_path=onnx_path(model_name),
+            input_size=input_size,
             conf_threshold=conf,
             nms_threshold=cfg.defaults.nms_threshold,
             classes=cfg.defaults.classes,
         )
     if det_cfg.backend == "pose":
         pose_onnx = stream.resolved_pose_onnx(cfg.defaults)
+        pose_size = (640, 640)  # yolov8n-pose is exported at 640
         # Prefer TensorRT engine when available (GPU), fallback to ONNX CPU
         from pathlib import Path as _Path
 
@@ -79,14 +83,14 @@ def build_detector(stream: StreamConfig, cfg: PipelineConfig, device_id: int) ->
 
             return TensorRTPose(
                 pose_engine,
-                input_size=cfg.defaults.input_size,
+                input_size=pose_size,
                 conf_threshold=conf,
                 nms_threshold=cfg.defaults.nms_threshold,
                 classes=cfg.defaults.classes,
             )
         return OnnxPoseDetector(
             onnx_path=pose_onnx,
-            input_size=cfg.defaults.input_size,
+            input_size=pose_size,
             conf_threshold=conf,
             nms_threshold=cfg.defaults.nms_threshold,
             classes=cfg.defaults.classes,
@@ -95,6 +99,7 @@ def build_detector(stream: StreamConfig, cfg: PipelineConfig, device_id: int) ->
         pose_onnx = stream.resolved_pose_onnx(cfg.defaults)
         pose_engine = str(Path(pose_onnx).parent / (Path(pose_onnx).stem + "_fp16.engine"))
         objects_onnx = stream.resolved_objects_onnx(cfg.defaults)
+        pose_size = (640, 640)  # yolov8n-pose is exported at 640
         # TensorRT for pose part when engine exists, ONNX for objects part is still CPU
         # For full GPU, both would be TensorRT — objects part already via tensorrt backend is GPU
         if Path(pose_engine).exists():
@@ -102,13 +107,14 @@ def build_detector(stream: StreamConfig, cfg: PipelineConfig, device_id: int) ->
 
             pose_det = TensorRTPose(
                 pose_engine,
-                input_size=cfg.defaults.input_size,
+                input_size=pose_size,
                 conf_threshold=conf,
                 nms_threshold=cfg.defaults.nms_threshold,
                 classes={0: "person"},
             )
             # objects part as TensorRT if available, else ONNX
             from pathlib import Path as _P2
+
             from ..detection.tensorrt_yolo import TensorRTYolo as _TRTYolo
 
             obj_engine = str(_P2(objects_onnx).parent / (_P2(objects_onnx).stem + "_fp16.engine"))
@@ -116,14 +122,13 @@ def build_detector(stream: StreamConfig, cfg: PipelineConfig, device_id: int) ->
                 obj_det: Detector = _TRTYolo(
                     obj_engine,
                     device_id=device_id,
-                    input_size=cfg.defaults.input_size,
+                    input_size=input_size,
                     conf_threshold=conf,
                     nms_threshold=cfg.defaults.nms_threshold,
                     classes=cfg.defaults.classes,
                 )
                 # combine via MultiDetector-like wrapper that holds two TensorRT detectors
                 # reuse MultiDetector logic but with pre-built detectors
-                from ..detection.multi import SEAT_CLASSES
 
                 class _TRTMulti(Detector):
                     def __init__(self, p, o):
@@ -136,7 +141,7 @@ def build_detector(stream: StreamConfig, cfg: PipelineConfig, device_id: int) ->
         return MultiDetector(
             pose_path=pose_onnx,
             objects_path=objects_onnx,
-            input_size=cfg.defaults.input_size,
+            input_size=(640, 640),  # CPU fallback: both at 640
             conf_threshold=conf,
             nms_threshold=cfg.defaults.nms_threshold,
             pose_classes={0: "person"},
@@ -147,9 +152,9 @@ def build_detector(stream: StreamConfig, cfg: PipelineConfig, device_id: int) ->
             det_cfg.openai, classes=cfg.defaults.classes, conf_threshold=conf
         )
     return TensorRTYolo(
-        engine_path=engine_path(stream.resolved_model(cfg.defaults)),
+        engine_path=engine_path(model_name),
         device_id=device_id,
-        input_size=cfg.defaults.input_size,
+        input_size=input_size,
         conf_threshold=conf,
         nms_threshold=cfg.defaults.nms_threshold,
         classes=cfg.defaults.classes,

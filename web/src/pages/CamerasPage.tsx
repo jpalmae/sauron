@@ -138,7 +138,7 @@ export default function CamerasPage() {
             initial={EMPTY}
             onSave={async (d) => {
               const { domain, ...rest } = d;
-              const patch = domain === "people" ? { detector: "pose_objects" as const, model: null } : { detector: "tensorrt" as const, model: "yolov8n" as const };
+              const patch = domain === "people" ? { detector: "pose_objects" as const, model: null } : { detector: "tensorrt" as const, model: "yolov8s" as const };
               await api.createCamera({ ...rest, ...patch });
               setCreating(false);
               await reload();
@@ -173,7 +173,7 @@ export default function CamerasPage() {
                       value={d}
                       onChange={async (e) => {
                         const nd = e.target.value as Domain;
-                        const patch = nd === "people" ? { detector: "pose_objects", model: null } : { detector: "tensorrt", model: "yolov8n" };
+                        const patch = nd === "people" ? { detector: "pose_objects", model: null } : { detector: "tensorrt", model: "yolov8s" };
                         await api.updateCamera(c.id, patch);
                         await reload();
                       }}
@@ -285,7 +285,7 @@ export default function CamerasPage() {
                       initial={{ name: c.name, stream_id: c.stream_id, rtsp_url: c.rtsp_url, domain: getCameraDomain(c) }}
                       onSave={async (d) => {
                         const { domain, ...rest } = d;
-                        const patch = domain === "people" ? { detector: "pose_objects", model: null } : { detector: "tensorrt", model: "yolov8n" };
+                        const patch = domain === "people" ? { detector: "pose_objects", model: null } : { detector: "tensorrt", model: "yolov8s" };
                         await api.updateCamera(c.id, { ...rest, ...patch });
                         setEditing(null);
                         await reload();

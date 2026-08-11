@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import { SlidersHorizontal } from "lucide-react";
 import { api, type EngineConfig } from "../lib/api";
 
-const BACKENDS = ["pose_objects", "pose", "onnx", "mock"];
-const MODELS = ["yolov8n", "yolov8s", "yolov8m", "yolo11n", "yolo11s"];
+const BACKENDS = ["tensorrt", "pose_objects", "pose", "onnx", "mock"];
+const MODELS = ["yolov8n", "yolov8s", "yolov8m", "yolov8s-1280", "yolov8m-1280", "yolo11n", "yolo11s"];
 
 export default function EnginePage() {
   const [cfg, setCfg] = useState<EngineConfig | null>(null);
@@ -90,7 +90,7 @@ export default function EnginePage() {
         <Field label="Modelo (catálogo, para backend onnx)">
           <select
             className="w-full rounded-md border border-line bg-base px-3 py-2 text-sm text-ink outline-none focus:border-info"
-            value={String(d.model ?? "yolov8n")}
+            value={String(d.model ?? "yolov8s")}
             onChange={(e) => set("model", e.target.value)}
           >
             {MODELS.map((m) => (

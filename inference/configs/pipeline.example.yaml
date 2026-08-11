@@ -10,10 +10,11 @@ devices: [0]
 
 defaults:
   # Model from the catalog (baked into the images): yolov8n, yolov8s,
-  # yolov8m, yolo11n, yolo11s. Override per stream with `model:`.
-  model: yolov8n
+  # yolov8m, yolo11n, yolo11s, yolov8s-1280, yolov8m-1280.
+  # Override per stream with `model:`.
+  model: yolov8s
   input_size: [640, 640]
-  confidence_threshold: 0.50
+  confidence_threshold: 0.35
   nms_threshold: 0.45
   detector:
     # tensorrt: local GPU engine (default, 10-15 FPS/stream on L4)
@@ -33,7 +34,7 @@ defaults:
     5: bus
     7: truck
   tracker:
-    high_thresh: 0.50
+    high_thresh: 0.35
     low_thresh: 0.10
     match_thresh: 0.80
     max_time_lost: 30

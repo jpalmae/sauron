@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import cv2
 import numpy as np
 
 from ..types import Detection
@@ -23,7 +22,7 @@ class TensorRTPose(Detector):
     ) -> None:
         try:
             import tensorrt as trt
-            from cuda.bindings import driver as cu  # noqa: F401
+            from cuda.bindings import driver as cu
         except ImportError as e:
             raise RuntimeError("TensorRTPose requiere extra gpu (tensorrt + cuda-python)") from e
 

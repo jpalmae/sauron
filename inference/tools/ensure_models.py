@@ -84,7 +84,7 @@ def ensure_engines(models_dir: Path, names: set[str], int8: bool, calib_data: st
         print(f"building {engine.name} from {onnx.name} (first boot, takes a few minutes)…")
         build_engine(
             onnx, engine, fp16=not int8, int8=int8, workspace_gb=4,
-            calib_data=calib_data, imgsz=640,
+            calib_data=calib_data, imgsz=info.imgsz,
         )
 
 

@@ -13,7 +13,7 @@ def _write(tmp_path, data):
 def test_load_example_config():
     cfg = load_config("configs/pipeline.example.yaml")
     assert len(cfg.streams) == 2
-    assert cfg.defaults.confidence_threshold == 0.5
+    assert cfg.defaults.confidence_threshold == 0.35
     assert cfg.defaults.classes[2] == "car"
     assert cfg.streams[0].type == "rtsp"
 

@@ -176,7 +176,7 @@ export default function RoiConfiguratorPage() {
               value={cameraDomain ?? "traffic"}
               onChange={async (e) => {
                 const nd = e.target.value as "traffic" | "people";
-                const patch = nd === "people" ? { detector: "pose_objects" as const } : { detector: "tensorrt" as const, model: "yolov8n" as const };
+                const patch = nd === "people" ? { detector: "pose_objects" as const } : { detector: "tensorrt" as const, model: "yolov8s" as const };
                 await api.updateCamera(camera.id, patch);
                 setCamera({ ...camera, ...patch } as Camera);
               }}

@@ -14,19 +14,19 @@ router = APIRouter(prefix="/pipeline-config", tags=["pipeline-config"])
 
 # Seed matching the people-analytics defaults so the first poll is a no-op.
 DEFAULTS_SEED: dict = {
-    "confidence_threshold": 0.4,
+    "confidence_threshold": 0.35,
     "nms_threshold": 0.45,
     "input_size": [640, 640],
     "detector": {"backend": "pose_objects"},
-    "model": "yolov8n",
+    "model": "yolov8s",
     "pose_onnx_path": "models/yolov8n-pose.onnx",
-    "objects_onnx_path": "models/yolov8n.onnx",
+    "objects_onnx_path": "models/yolov8s.onnx",
     "classes": {
         "2": "car", "3": "motorcycle", "5": "bus", "7": "truck",
         "62": "chair", "63": "couch",
     },
     "tracker": {
-        "high_thresh": 0.4, "low_thresh": 0.1, "match_thresh": 0.8,
+        "high_thresh": 0.35, "low_thresh": 0.1, "match_thresh": 0.8,
         "max_time_lost": 30, "history_size": 60,
     },
     "capture": {"queue_size": 2, "use_gstreamer": False},

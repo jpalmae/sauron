@@ -2,14 +2,25 @@ import pytest
 import yaml
 
 from sauron_inference.config import load_config
-from sauron_inference.models import CATALOG, DEFAULT_MODEL, engine_path, onnx_path, validate_model
+from sauron_inference.models import (
+    CATALOG,
+    DEFAULT_MODEL,
+    engine_path,
+    model_imgsz,
+    onnx_path,
+    validate_model,
+)
 
 
 def test_catalog_complete():
-    assert set(CATALOG) == {"yolov8n", "yolov8s", "yolov8m", "yolo11n", "yolo11s"}
+    assert set(CATALOG) == {
+        "yolov8n", "yolov8s", "yolov8m", "yolov8s-1280", "yolov8m-1280",
+        "yolo11n", "yolo11s", "yolov8n-pose",
+    }
     for info in CATALOG.values():
         assert info.onnx_file.endswith(".onnx")
         assert info.engine_file.endswith("_fp16.engine")
+        assert info.imgsz in (640, 1280)
 
 
 def test_validate_model():
@@ -22,6 +33,15 @@ def test_paths():
     assert onnx_path("yolov8m") == "models/yolov8m.onnx"
     assert engine_path("yolo11s") == "models/yolo11s_fp16.engine"
     assert onnx_path("yolov8n", "/app/models") == "/app/models/yolov8n.onnx"
+    assert onnx_path("yolov8s-1280") == "models/yolov8s_1280.onnx"
+    assert engine_path("yolov8m-1280") == "models/yolov8m_1280_fp16.engine"
+
+
+def test_model_imgsz():
+    assert model_imgsz("yolov8s") == 640
+    assert model_imgsz("yolov8s-1280") == 1280
+    assert model_imgsz("yolov8m-1280") == 1280
+    assert model_imgsz("yolov8n-pose") == 640
 
 
 def _write(tmp_path, data):
