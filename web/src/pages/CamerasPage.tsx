@@ -2,15 +2,16 @@ import { Pencil, Plus, Route, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, type Camera } from "../lib/api";
-import { DOMAIN_COLOR, DOMAIN_DOT, DOMAIN_LABEL, filterCamerasByDomain, getCameraDomain, type Domain } from "../lib/domain";
+import { DOMAIN_COLOR, filterCamerasByDomain, getCameraDomain, type Domain } from "../lib/domain";
 
 interface Draft {
   name: string;
   stream_id: string;
   rtsp_url: string;
+  domain: Domain;
 }
 
-const EMPTY: Draft = { name: "", stream_id: "", rtsp_url: "" };
+const EMPTY: Draft = { name: "", stream_id: "", rtsp_url: "", domain: "traffic" as Domain };
 
 function CameraForm({
   initial,
@@ -36,13 +37,23 @@ function CameraForm({
         }
       }}
     >
-      <input
-        required
-        placeholder="Nombre (p. ej. Entrada Norte)"
-        value={draft.name}
-        onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-        className="w-full rounded-md border border-line bg-base px-3 py-2 text-sm"
-      />
+      <div className="grid grid-cols-2 gap-2">
+        <input
+          required
+          placeholder="Nombre (p. ej. Entrada Norte)"
+          value={draft.name}
+          onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+          className="rounded-md border border-line bg-base px-3 py-2 text-sm"
+        />
+        <select
+          value={draft.domain}
+          onChange={(e) => setDraft({ ...draft, domain: e.target.value as Domain })}
+          className="rounded-md border border-line bg-base px-3 py-2 text-sm"
+        >
+          <option value="traffic">🚗 Tráfico</option>
+          <option value="people">🧍 Personas</option>
+        </select>
+      </div>
       <input
         required
         placeholder="stream_id (p. ej. cam-01)"
@@ -126,7 +137,9 @@ export default function CamerasPage() {
           <CameraForm
             initial={EMPTY}
             onSave={async (d) => {
-              await api.createCamera(d);
+              const { domain, ...rest } = d;
+              const patch = domain === "people" ? { detector: "pose_objects" as const, model: null } : { detector: "tensorrt" as const, model: "yolov8n" as const };
+              await api.createCamera({ ...rest, ...patch });
               setCreating(false);
               await reload();
             }}
@@ -156,10 +169,19 @@ export default function CamerasPage() {
                   <td className="px-4 py-2.5 font-medium">{c.name}</td>
                   <td className="px-4 py-2.5 font-mono text-xs text-mut">{c.stream_id}</td>
                   <td className="px-4 py-2.5">
-                    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 font-mono text-[10px] ${DOMAIN_COLOR[d]}`}>
-                      <span className={`h-1.5 w-1.5 rounded-full ${DOMAIN_DOT[d]}`} />
-                      {DOMAIN_LABEL[d]}
-                    </span>
+                    <select
+                      value={d}
+                      onChange={async (e) => {
+                        const nd = e.target.value as Domain;
+                        const patch = nd === "people" ? { detector: "pose_objects", model: null } : { detector: "tensorrt", model: "yolov8n" };
+                        await api.updateCamera(c.id, patch);
+                        await reload();
+                      }}
+                      className={`rounded-full border px-2 py-0.5 font-mono text-[10px] ${DOMAIN_COLOR[d]}`}
+                    >
+                      <option value="traffic">Tráfico</option>
+                      <option value="people">Personas</option>
+                    </select>
                   </td>
                   <td className="px-4 py-2.5 font-mono text-xs text-mut">
                     {c.roi_config
@@ -260,9 +282,11 @@ export default function CamerasPage() {
                 <tr key={`${c.id}-edit`} className="border-b border-line/50 bg-panel/60">
                   <td colSpan={7} className="px-4 py-3">
                     <CameraForm
-                      initial={{ name: c.name, stream_id: c.stream_id, rtsp_url: c.rtsp_url }}
+                      initial={{ name: c.name, stream_id: c.stream_id, rtsp_url: c.rtsp_url, domain: getCameraDomain(c) }}
                       onSave={async (d) => {
-                        await api.updateCamera(c.id, { name: d.name, rtsp_url: d.rtsp_url });
+                        const { domain, ...rest } = d;
+                        const patch = domain === "people" ? { detector: "pose_objects", model: null } : { detector: "tensorrt", model: "yolov8n" };
+                        await api.updateCamera(c.id, { ...rest, ...patch });
                         setEditing(null);
                         await reload();
                       }}

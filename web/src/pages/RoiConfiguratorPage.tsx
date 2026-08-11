@@ -162,6 +162,8 @@ export default function RoiConfiguratorPage() {
     { key: "delete", label: "Borrar", icon: Trash2, hint: "click sobre la figura" },
   ];
 
+  const cameraDomain = camera ? (camera.detector?.includes("pose") ? "people" as const : "traffic" as const) : null;
+
   return (
     <div className="flex h-full">
       <div className="flex min-w-0 flex-1 flex-col p-4">
@@ -169,6 +171,21 @@ export default function RoiConfiguratorPage() {
           <h1 className="font-display text-lg font-semibold">
             ROI — {camera?.name ?? "…"}
           </h1>
+          {camera && (
+            <select
+              value={cameraDomain ?? "traffic"}
+              onChange={async (e) => {
+                const nd = e.target.value as "traffic" | "people";
+                const patch = nd === "people" ? { detector: "pose_objects" as const } : { detector: "tensorrt" as const, model: "yolov8n" as const };
+                await api.updateCamera(camera.id, patch);
+                setCamera({ ...camera, ...patch } as Camera);
+              }}
+              className="rounded-md border border-line bg-panel px-2 py-1 text-xs"
+            >
+              <option value="traffic">🚗 Tráfico</option>
+              <option value="people">🧍 Personas</option>
+            </select>
+          )}
           <div className="ml-auto flex items-center gap-1.5">
             {TOOLS.map(({ key, label, icon: Icon, hint }) => (
               <button
