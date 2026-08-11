@@ -255,6 +255,7 @@ class PipelineManager:
             "type": stream.type,
             "source": stream.source,
             "target_fps": stream.target_fps,
+            "model": stream.model,
             "detector": stream.detector.model_dump(mode="json") if stream.detector else None,
             "roi": stream.roi.model_dump(mode="json") if stream.roi else None,
         }
