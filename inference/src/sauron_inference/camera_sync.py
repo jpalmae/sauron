@@ -32,7 +32,7 @@ class APICameraSource:
         self.defaults = defaults
         self.target_fps = target_fps
         self.poll_interval = poll_interval
-        self._client = httpx.Client(base_url=self.base_url, timeout=10.0)
+        self._client = httpx.Client(base_url=self.base_url, timeout=15.0)
 
     def fetch_streams(self) -> list[StreamConfig]:
         headers = {}

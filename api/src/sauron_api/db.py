@@ -21,7 +21,13 @@ _session_factory = None
 def get_engine():
     global _engine
     if _engine is None:
-        _engine = create_async_engine(get_settings().database_url, pool_pre_ping=True)
+        _engine = create_async_engine(
+            get_settings().database_url,
+            pool_pre_ping=True,
+            pool_size=20,
+            max_overflow=30,
+            pool_timeout=30,
+        )
     return _engine
 
 
