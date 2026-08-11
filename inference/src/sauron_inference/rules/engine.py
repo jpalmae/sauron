@@ -32,12 +32,12 @@ _POLYGON_RULES: dict[PolygonRuleName, Callable[[PolygonConfig], Rule]] = {
 class RulesEngine:
     """Per-camera dispatcher: evaluates configured rules over tracked objects."""
 
-    def __init__(self, camera_id: str, roi: ROIConfig, fps: int = 15) -> None:
+    def __init__(self, camera_id: str, roi: ROIConfig, fps: int = 15, defaults=None) -> None:
         self.camera_id = camera_id
         self.privacy = roi.privacy
         speed = SpeedEstimator(roi.homography) if roi.homography else None
         self.ctx = RuleContext(
-            camera_id=camera_id, fps=fps, thresholds=roi.thresholds, speed_estimator=speed
+            camera_id=camera_id, fps=fps, thresholds=roi.thresholds, speed_estimator=speed, defaults=defaults
         )
         self.rules: list[Rule] = [LineCrossingRule(line) for line in roi.lines]
         for poly in roi.polygons:

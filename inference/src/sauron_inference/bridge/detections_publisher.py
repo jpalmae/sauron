@@ -38,7 +38,7 @@ class RedisDetectionsPublisher:
                     "class": t.class_name,
                     "box": [x1 / w, y1 / h, x2 / w, y2 / h],
                 }
-                if t.keypoints is not None:
+                if t.class_name == "person" and t.keypoints is not None:
                     obj["posture"] = classify_posture(t.keypoints, t.bbox)
                     obj["keypoints"] = [
                         [float(t.keypoints[i][0]) / w, float(t.keypoints[i][1]) / h]

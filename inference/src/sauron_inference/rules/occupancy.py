@@ -6,17 +6,18 @@ from collections import Counter
 import cv2
 import numpy as np
 
-from ..config import PolygonConfig
+from ..config import DefaultsConfig, PolygonConfig
 from ..types import Frame, TrackedObject
 from .base import Rule, RuleContext
 from .events import Event, EventType, Priority
 from .geometry import point_in_polygon
 
-_POSTURE_STABLE_FRAMES = 4
+# Default constants (also used by the detections publisher, which has no ctx)
+_FALLEN_ASPECT = 1.3
 _KPT_CONF = 0.3
 _KNEE_BEND_DEG = 140.0
-_FALLEN_ASPECT = 1.3  # bbox width/height >= this => lying down
-_REID_SIM = 0.55  # color-histogram cosine sim above this => same person
+_POSTURE_STABLE_FRAMES = 4
+_REID_SIM = 0.55
 _FALL_COOLDOWN_S = 20.0
 
 
@@ -25,10 +26,15 @@ def _angle(vertex, a, b) -> float:
     v2 = (b[0] - vertex[0], b[1] - vertex[1])
     denom = math.hypot(*v1) * math.hypot(*v2) + 1e-6
     cos = max(-1.0, min(1.0, (v1[0] * v2[0] + v1[1] * v2[1]) / denom))
-    return math.degrees(math.acos(cos))
+    return math.degrees(cos)
 
 
-def classify_posture(keypoints: np.ndarray | None, bbox) -> str:
+def classify_posture(
+    keypoints: np.ndarray | None,
+    bbox,
+    fall_aspect: float = _FALLEN_ASPECT,
+    knee_bend_deg: float = _KNEE_BEND_DEG,
+) -> str:
     """keypoints [17,3] + xyxy bbox -> standing | sitting | fallen | unknown."""
     if bbox is None:
         return "unknown"
@@ -36,9 +42,9 @@ def classify_posture(keypoints: np.ndarray | None, bbox) -> str:
         x1, y1, x2, y2 = bbox
         w = x2 - x1
         h = y2 - y1
-        if h > 0 and w / h >= _FALLEN_ASPECT:
+        if h > 0 and w / h >= fall_aspect:
             return "fallen"
-    except (TypeError, ValueError, IndexError):
+    except Exception:
         pass
     if keypoints is None:
         return "unknown"
@@ -46,16 +52,13 @@ def classify_posture(keypoints: np.ndarray | None, bbox) -> str:
     try:
         angles = []
         for hip_i, knee_i, ankle_i in [(11, 13, 15), (12, 14, 16)]:
-            hc = kp[hip_i][2]
-            kc = kp[knee_i][2]
-            ac = kp[ankle_i][2]
-            if hc >= _KPT_CONF and kc >= _KPT_CONF and ac >= _KPT_CONF:
+            if kp[hip_i][2] >= _KPT_CONF and kp[knee_i][2] >= _KPT_CONF and kp[ankle_i][2] >= _KPT_CONF:
                 angles.append(_angle(tuple(kp[knee_i][:2]), tuple(kp[hip_i][:2]), tuple(kp[ankle_i][:2])))
         if not angles:
             return "unknown"
         avg = sum(angles) / len(angles)
-        return "sitting" if avg < _KNEE_BEND_DEG else "standing"
-    except (TypeError, ValueError, IndexError):
+        return "sitting" if avg < knee_bend_deg else "standing"
+    except Exception:
         return "unknown"
 
 
@@ -72,7 +75,7 @@ def _fingerprint(image: np.ndarray, bbox) -> np.ndarray | None:
         hist = cv2.calcHist([hsv], [0, 1], None, [50, 60], [0, 180, 0, 256])
         cv2.normalize(hist, hist)
         return hist.flatten()
-    except (cv2.error, TypeError, ValueError, IndexError):
+    except Exception:
         return None
 
 
@@ -98,26 +101,22 @@ class OccupancyRule(Rule):
         self.sit_to_stand = 0
         self.stand_to_sit = 0
         self.falls = 0
-        self._gallery: list[np.ndarray] = []  # ReID color fingerprints
+        self._gallery: list[np.ndarray] = []
         self.unique_reid = 0
 
     def _inside_people(self, tracks: list[TrackedObject]) -> list[TrackedObject]:
-        return [
-            t for t in tracks
-            if t.class_name == "person" and point_in_polygon(t.centroid, self._polygon)
-        ]
+        return [t for t in tracks if t.class_name == "person" and point_in_polygon(t.centroid, self._polygon)]
 
-    def _register_reid(self, oid: int, t: TrackedObject, frame: Frame) -> None:
+    def _register_reid(self, oid: int, t: TrackedObject, frame: Frame, sim_thresh: float) -> None:
         fp = _fingerprint(frame.image, t.bbox)
         if fp is None:
             return
         best = max((_cosine(fp, g) for g in self._gallery), default=0.0)
-        if best < _REID_SIM:
+        if best < sim_thresh:
             self._gallery.append(fp)
             self.unique_reid += 1
 
-    def _update_posture(self, oid: int, raw: str, frame: Frame) -> list[tuple[int, str, str]]:
-        """Anti-flicker state machine; returns committed transitions this frame."""
+    def _update_posture(self, oid: int, raw: str, frame: Frame, stable_frames: int) -> list[tuple[int, str, str]]:
         transitions: list[tuple[int, str, str]] = []
         committed = self._committed.get(oid)
         if committed is None:
@@ -131,7 +130,7 @@ class OccupancyRule(Rule):
         cand = raw if cand != raw else cand
         n = n + 1 if cand == raw else 1
         self._pending[oid] = (cand, n)
-        if n >= _POSTURE_STABLE_FRAMES:
+        if n >= stable_frames:
             transitions.append((oid, committed, cand))
             if committed == "sitting" and cand == "standing":
                 self.sit_to_stand += 1
@@ -142,6 +141,7 @@ class OccupancyRule(Rule):
         return transitions
 
     def process(self, frame: Frame, tracks: list[TrackedObject], ctx: RuleContext) -> list[Event]:
+        d = ctx.defaults or DefaultsConfig()
         now = frame.timestamp
         inside = self._inside_people(tracks)
         inside_ids = {t.object_id for t in inside}
@@ -152,11 +152,14 @@ class OccupancyRule(Rule):
             if t.object_id not in self._first_seen:
                 self._first_seen[t.object_id] = now
                 self._seen.add(t.object_id)
-                self._register_reid(t.object_id, t, frame)
+                self._register_reid(t.object_id, t, frame, d.reid_sim)
             for oid, frm, to in self._update_posture(
-                t.object_id, classify_posture(t.keypoints, t.bbox), frame
+                t.object_id,
+                classify_posture(t.keypoints, t.bbox, d.fall_aspect, d.knee_bend_deg),
+                frame,
+                d.posture_stable_frames,
             ):
-                if to == "fallen" and now - self._last_fall.get(oid, 0.0) > _FALL_COOLDOWN_S:
+                if to == "fallen" and now - self._last_fall.get(oid, 0.0) > d.fall_cooldown_s:
                     self._last_fall[oid] = now
                     self.falls += 1
                     events.append(
@@ -179,15 +182,14 @@ class OccupancyRule(Rule):
                 self._pending.pop(oid, None)
 
         count = len(inside)
-        self._peak = max(self._peak, count)
+        if count > self._peak:
+            self._peak = count
 
         if now - self._last_emit < ctx.thresholds.occupancy_interval_s:
             return events
         self._last_emit = now
 
-        avg_dwell = (
-            sum(now - self._first_seen[t.object_id] for t in inside) / count if count else 0.0
-        )
+        avg_dwell = sum(now - self._first_seen[t.object_id] for t in inside) / count if count else 0.0
         posture = Counter(self._committed.get(t.object_id, "unknown") for t in inside)
 
         events.append(
