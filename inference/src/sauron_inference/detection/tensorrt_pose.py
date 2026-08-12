@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import numpy as np
 
 from ..types import Detection
 from .base import Detector
+
+log = logging.getLogger(__name__)
 
 
 class TensorRTPose(Detector):
@@ -110,4 +113,4 @@ class TensorRTPose(Detector):
             try:
                 cu.cuMemFree(ptr)
             except Exception:
-                pass
+                log.debug("cuMemFree failed", exc_info=True)

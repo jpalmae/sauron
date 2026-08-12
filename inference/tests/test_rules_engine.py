@@ -40,7 +40,8 @@ def roi_config():
                 rules=["stopped", "congestion"],
             ),
             PolygonConfig(
-                id="parking1", kind="parking",
+                id="parking1",
+                kind="parking",
                 points=[[0, 500], [300, 500], [300, 700], [0, 700]],
                 rules=["stopped"],
             ),
@@ -88,6 +89,20 @@ def test_engine_dispatches_events_with_snapshot():
     assert "snapshot" not in d  # raw frames must not leak into payloads
 
 
+def test_engine_can_run_metadata_only_without_visual_evidence():
+    engine = RulesEngine(
+        "cam-e", roi_config(), fps=FPS, attach_visual_evidence=False
+    )
+    events = []
+    for index in range(24):
+        ts = index / FPS
+        events += engine.process(frame(ts), [make_track(1, 500, 250, ts)])
+    stopped = [e for e in events if e.event_type == EventType.STOPPED_VEHICLE]
+    assert len(stopped) == 1
+    assert stopped[0].snapshot is None
+    assert "signature" not in stopped[0].metadata
+
+
 def test_engine_enriches_speed():
     engine = RulesEngine("cam-e", roi_config(), fps=FPS)
     t1 = make_track(1, 500, 250, 0.0, vx=10.0)
@@ -112,3 +127,21 @@ def test_line_crossing_event_includes_speed():
     assert len(crossing) == 1
     assert crossing[0].metadata["vehicle_class"] == "car"
     assert "speed_kmh" in crossing[0].metadata
+
+
+def test_periodic_occupancy_metrics_do_not_store_visual_evidence():
+    roi = ROIConfig(
+        polygons=[
+            PolygonConfig(
+                id="people",
+                points=[[0, 0], [1000, 0], [1000, 500], [0, 500]],
+                rules=["occupancy", "chair_occupancy"],
+            )
+        ]
+    )
+    events = RulesEngine("cam-e", roi, fps=FPS).process(frame(0.0), [])
+    assert {event.event_type for event in events} == {
+        EventType.OCCUPANCY,
+        EventType.CHAIR_OCCUPANCY,
+    }
+    assert all(event.snapshot is None for event in events)

@@ -27,9 +27,7 @@ def tlwh_to_xyah(tlwh: np.ndarray) -> np.ndarray:
 
 
 def xyxy_to_tlwh(bbox: np.ndarray) -> np.ndarray:
-    return np.array(
-        [bbox[0], bbox[1], bbox[2] - bbox[0], bbox[3] - bbox[1]], dtype=np.float64
-    )
+    return np.array([bbox[0], bbox[1], bbox[2] - bbox[0], bbox[3] - bbox[1]], dtype=np.float64)
 
 
 def iou_distance(a_tracks: list[STrack], b_tracks: list[STrack]) -> np.ndarray:
@@ -50,10 +48,18 @@ def iou_distance(a_tracks: list[STrack], b_tracks: list[STrack]) -> np.ndarray:
 
 
 def fuse_score(cost: np.ndarray, detections: list[STrack]) -> np.ndarray:
+    """Fuse IoU similarity with detection confidence.
+
+    ``cost`` is ``1 - IoU``.  Multiplying the cost itself by ``1-score``
+    makes a high-confidence detection look like a good match even when IoU is
+    zero.  ByteTrack instead scales the *similarity* and converts it back to a
+    cost.
+    """
     if cost.size == 0:
         return cost
     scores = np.array([d.score for d in detections], dtype=np.float64)
-    return cost * (1.0 - scores[None, :])
+    similarity = 1.0 - cost
+    return 1.0 - similarity * scores[None, :]
 
 
 class STrack:
@@ -110,14 +116,10 @@ class STrack:
 
     def update(self, kf: KalmanFilterXYAH, det: STrack, frame_id: int) -> None:
         assert self.mean is not None and self.covariance is not None
-        self.mean, self.covariance = kf.update(
-            self.mean, self.covariance, tlwh_to_xyah(det.tlwh)
-        )
+        self.mean, self.covariance = kf.update(self.mean, self.covariance, tlwh_to_xyah(det.tlwh))
         xyah = self.mean[:4]
         w = xyah[2] * xyah[3]
-        self.tlwh = np.array(
-            [xyah[0] - w / 2, xyah[1] - xyah[3] / 2, w, xyah[3]], dtype=np.float64
-        )
+        self.tlwh = np.array([xyah[0] - w / 2, xyah[1] - xyah[3] / 2, w, xyah[3]], dtype=np.float64)
         self.score = det.score
         self.state = TrackState.TRACKED
         self.frame_id = frame_id
@@ -148,7 +150,9 @@ class BYTETracker:
         self.lost: list[STrack] = []
         self.removed: list[STrack] = []
         self.max_time_lost = self.cfg.max_time_lost or int(frame_rate * 2)
-        self._buffer_size = int(frame_rate / 30.0 * self.cfg.max_time_lost) or self.cfg.max_time_lost
+        self._buffer_size = (
+            int(frame_rate / 30.0 * self.cfg.max_time_lost) or self.cfg.max_time_lost
+        )
 
     def update(self, detections: list[Detection]) -> list[STrack]:
         self.frame_id += 1
@@ -158,9 +162,7 @@ class BYTETracker:
         removed: list[STrack] = []
 
         dets_high = [d for d in detections if d.score >= self.cfg.high_thresh]
-        dets_low = [
-            d for d in detections if self.cfg.low_thresh <= d.score < self.cfg.high_thresh
-        ]
+        dets_low = [d for d in detections if self.cfg.low_thresh <= d.score < self.cfg.high_thresh]
 
         stracks_high = [self._to_strack(d) for d in dets_high]
         stracks_low = [self._to_strack(d) for d in dets_low]
@@ -244,8 +246,17 @@ class BYTETracker:
         if not tracks or not dets:
             return [], list(range(len(tracks))), list(range(len(dets)))
         cost = iou_distance(tracks, dets)
+        # A track must not change semantic class.  Without this gate, nearby
+        # cars/buses/trucks can exchange IDs and corrupt per-class counts.
+        track_classes = np.asarray([t.class_id for t in tracks])[:, None]
+        det_classes = np.asarray([d.class_id for d in dets])[None, :]
+        class_mismatch = track_classes != det_classes
         if fuse:
             cost = fuse_score(cost, dets)
+        # Keep the matrix finite because scipy rejects an all-infinite row or
+        # column.  The normal threshold check below still makes these entries
+        # impossible to accept.
+        cost[class_mismatch] = 1e6
         row, col = linear_sum_assignment(cost)
         matches: list[tuple[int, int]] = []
         u_track = set(range(len(tracks)))

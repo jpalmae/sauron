@@ -1,0 +1,38 @@
+services:
+  inference:
+    build:
+      context: .
+      dockerfile: deploy/docker/deepstream.Dockerfile
+    image: sauron/deepstream:0.1.0
+    gpus: all
+    deploy:
+      resources:
+        reservations:
+          devices: !reset []
+    environment: !override
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,video,utility
+      SAURON_REDIS_URL: redis://redis:6379/0
+      SAURON_API_URL: http://api:8000
+      SAURON_INGEST_TOKEN: ${INGEST_TOKEN}
+      SAURON_DS_ROOT: /app/deepstream
+      SAURON_DS_ENGINE_DIR: /models/deepstream
+      SAURON_DS_MAX_STREAMS: ${DEEPSTREAM_MAX_STREAMS:-20}
+      SAURON_DS_SECONDARY_BATCH: ${DEEPSTREAM_SECONDARY_BATCH:-64}
+      SAURON_DS_TARGET_FPS: ${DEEPSTREAM_TARGET_FPS:-10}
+      SAURON_DS_INFERENCE_INTERVAL: ${DEEPSTREAM_INFERENCE_INTERVAL:-0}
+      SAURON_DS_SOURCE_POLL_S: "15"
+      SAURON_DS_SOURCE_REST_PORT: "9010"
+      SAURON_DS_HEALTH_PORT: "9100"
+    volumes: !override
+      - deepstream-engines:/models
+    command: null
+    healthcheck:
+      test: ["CMD", "/opt/sauron/bin/python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:9100/healthz')"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 15m
+
+volumes:
+  deepstream-engines:

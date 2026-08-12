@@ -50,7 +50,9 @@ def classify_posture(keypoints: np.ndarray | None, bbox) -> str:
             kc = kp[knee_i][2]
             ac = kp[ankle_i][2]
             if hc >= _KPT_CONF and kc >= _KPT_CONF and ac >= _KPT_CONF:
-                angles.append(_angle(tuple(kp[knee_i][:2]), tuple(kp[hip_i][:2]), tuple(kp[ankle_i][:2])))
+                angles.append(
+                    _angle(tuple(kp[knee_i][:2]), tuple(kp[hip_i][:2]), tuple(kp[ankle_i][:2]))
+                )
         if not angles:
             return "unknown"
         avg = sum(angles) / len(angles)
@@ -103,7 +105,8 @@ class OccupancyRule(Rule):
 
     def _inside_people(self, tracks: list[TrackedObject]) -> list[TrackedObject]:
         return [
-            t for t in tracks
+            t
+            for t in tracks
             if t.class_name == "person" and point_in_polygon(t.centroid, self._polygon)
         ]
 
@@ -128,8 +131,10 @@ class OccupancyRule(Rule):
             self._pending.pop(oid, None)
             return transitions
         cand, n = self._pending.get(oid, (raw, 0))
-        cand = raw if cand != raw else cand
-        n = n + 1 if cand == raw else 1
+        if cand != raw:
+            cand, n = raw, 1
+        else:
+            n += 1
         self._pending[oid] = (cand, n)
         if n >= _POSTURE_STABLE_FRAMES:
             transitions.append((oid, committed, cand))

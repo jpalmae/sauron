@@ -31,3 +31,14 @@ def test_render_too_short_returns_none():
     buf.add(frame(0.0))
     assert buf.render_mp4() is None
     assert ClipBuffer().render_mp4() is None
+
+
+def test_snapshot_is_immutable_for_background_rendering():
+    buf = ClipBuffer(preroll_seconds=2.0, fps=10)
+    for i in range(5):
+        buf.add(frame(i / 10, value=32 + i))
+    snapshot = buf.snapshot()
+    buf.add(frame(0.6, value=99))
+    assert len(snapshot) == 5
+    assert len(buf.snapshot()) == 6
+    assert buf.render_mp4(snapshot) is not None

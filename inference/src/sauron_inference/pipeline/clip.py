@@ -3,7 +3,9 @@ from __future__ import annotations
 import logging
 import os
 import tempfile
+import threading
 from collections import deque
+from collections.abc import Sequence
 
 import cv2
 import numpy as np
@@ -28,11 +30,10 @@ class ClipBuffer:
         jpeg_quality: int = 75,
         clip_fps: int = 12,
     ) -> None:
-        self._frames: deque[tuple[float, bytes]] = deque(
-            maxlen=max(1, int(preroll_seconds * fps))
-        )
+        self._frames: deque[tuple[float, bytes]] = deque(maxlen=max(1, int(preroll_seconds * fps)))
         self._quality = jpeg_quality
         self.clip_fps = clip_fps
+        self._lock = threading.Lock()
 
     def add(
         self,
@@ -47,13 +48,20 @@ class ClipBuffer:
             image = redact_frame(image, tracks, privacy)
         ok, jpeg = cv2.imencode(".jpg", image, [cv2.IMWRITE_JPEG_QUALITY, self._quality])
         if ok:
-            self._frames.append((frame.timestamp, jpeg.tobytes()))
+            with self._lock:
+                self._frames.append((frame.timestamp, jpeg.tobytes()))
 
-    def render_mp4(self) -> bytes | None:
-        if len(self._frames) < 2:
+    def snapshot(self) -> tuple[bytes, ...]:
+        """Return an immutable encoded-frame snapshot for background rendering."""
+        with self._lock:
+            return tuple(jpeg for _, jpeg in self._frames)
+
+    def render_mp4(self, encoded_frames: Sequence[bytes] | None = None) -> bytes | None:
+        frames = tuple(encoded_frames) if encoded_frames is not None else self.snapshot()
+        if len(frames) < 2:
             return None
         images: list[np.ndarray] = []
-        for _, jpeg in self._frames:
+        for jpeg in frames:
             img = cv2.imdecode(np.frombuffer(jpeg, np.uint8), cv2.IMREAD_COLOR)
             if img is not None:
                 images.append(img)

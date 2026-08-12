@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import UTC, datetime, timedelta
 
@@ -9,7 +10,6 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth import get_current_user, require_admin, require_ingest
-import json
 from ..config import get_settings
 from ..db import get_session
 from ..models import AnalyticsEvent, Camera, HourlyKpi, User
@@ -24,18 +24,25 @@ def _redis_client():
     global _aioredis
     if _aioredis is None:
         import redis.asyncio as aioredis
+
         _aioredis = aioredis.from_url(get_settings().redis_url)
     return _aioredis
 
 
 @router.get("", response_model=list[CameraRead])
-async def list_cameras(session: AsyncSession = Depends(get_session), _: User = Depends(get_current_user)):
+async def list_cameras(
+    session: AsyncSession = Depends(get_session), _: User = Depends(get_current_user)
+):
     result = await session.execute(select(Camera).order_by(Camera.name))
     return result.scalars().all()
 
 
 @router.post("", response_model=CameraRead, status_code=201)
-async def create_camera(payload: CameraCreate, session: AsyncSession = Depends(get_session), _: User = Depends(require_admin)):
+async def create_camera(
+    payload: CameraCreate,
+    session: AsyncSession = Depends(get_session),
+    _: User = Depends(require_admin),
+):
     exists = await session.execute(select(Camera).where(Camera.stream_id == payload.stream_id))
     if exists.scalar_one_or_none() is not None:
         raise HTTPException(409, f"stream_id '{payload.stream_id}' already exists")
@@ -59,7 +66,11 @@ async def list_active_cameras(
 
 
 @router.get("/{camera_id}", response_model=CameraRead)
-async def get_camera(camera_id: uuid.UUID, session: AsyncSession = Depends(get_session), _: User = Depends(get_current_user)):
+async def get_camera(
+    camera_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+    _: User = Depends(get_current_user),
+):
     camera = await session.get(Camera, camera_id)
     if camera is None:
         raise HTTPException(404, "camera not found")

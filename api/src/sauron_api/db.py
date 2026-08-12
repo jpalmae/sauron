@@ -21,13 +21,14 @@ _session_factory = None
 def get_engine():
     global _engine
     if _engine is None:
-        _engine = create_async_engine(
-            get_settings().database_url,
-            pool_pre_ping=True,
-            pool_size=20,
-            max_overflow=30,
-            pool_timeout=30,
-        )
+        database_url = get_settings().database_url
+        kwargs = {"pool_pre_ping": True}
+        # SQLite's StaticPool rejects QueuePool-only arguments used in
+        # production.  Keeping them conditional also makes local smoke tests
+        # exercise the real application startup path.
+        if not database_url.startswith("sqlite"):
+            kwargs.update(pool_size=20, max_overflow=30, pool_timeout=30)
+        _engine = create_async_engine(database_url, **kwargs)
     return _engine
 
 

@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..auth import get_current_user, require_admin, require_ingest
+from ..auth import require_admin, require_ingest
 from ..db import get_session
 from ..models import EngineConfig
 
@@ -22,12 +22,19 @@ DEFAULTS_SEED: dict = {
     "pose_onnx_path": "models/yolov8n-pose.onnx",
     "objects_onnx_path": "models/yolov8s.onnx",
     "classes": {
-        "2": "car", "3": "motorcycle", "5": "bus", "7": "truck",
-        "62": "chair", "63": "couch",
+        "2": "car",
+        "3": "motorcycle",
+        "5": "bus",
+        "7": "truck",
+        "62": "chair",
+        "63": "couch",
     },
     "tracker": {
-        "high_thresh": 0.35, "low_thresh": 0.1, "match_thresh": 0.8,
-        "max_time_lost": 30, "history_size": 60,
+        "high_thresh": 0.35,
+        "low_thresh": 0.1,
+        "match_thresh": 0.8,
+        "max_time_lost": 30,
+        "history_size": 60,
     },
     "capture": {"queue_size": 2, "use_gstreamer": False},
     "clips": {"enabled": True, "preroll_seconds": 6, "clip_fps": 10},

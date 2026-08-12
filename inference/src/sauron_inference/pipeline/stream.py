@@ -24,6 +24,7 @@ log = logging.getLogger(__name__)
 
 TracksCallback = Callable[[str, Frame, list[TrackedObject]], None]
 EventCallback = Callable[[Event], None]
+_CLIP_PRIORITIES = {"warning", "critical"}
 
 
 def to_tracked_object(track: STrack, frame: Frame) -> TrackedObject:
@@ -83,6 +84,14 @@ class StreamPipeline:
         self._worker_thread = threading.Thread(
             target=self._worker_loop, name=f"proc-{source.camera_id}", daemon=True
         )
+        # Evidence encoding and event publication must never stall inference.
+        self._event_queue: queue.Queue[tuple[list[Event], tuple[bytes, ...] | None]] = queue.Queue(
+            maxsize=8
+        )
+        self._event_stop = threading.Event()
+        self._event_thread = threading.Thread(
+            target=self._event_loop, name=f"events-{source.camera_id}", daemon=True
+        )
         self.frames_captured = 0
         self.frames_processed = 0
         self.frames_dropped = 0
@@ -125,31 +134,70 @@ class StreamPipeline:
                     self.clip_buffer.add(frame, tracked, privacy)
                 if self.rules_engine is not None:
                     events = self.rules_engine.process(frame, tracked)
-                    if events and self.clip_buffer is not None:
-                        clip = self.clip_buffer.render_mp4()
-                        for event in events:
-                            event.clip = clip
                     for event in events:
-                        log.info(
-                            "[%s] %s %s", frame.camera_id, event.priority, event.event_type
-                        )
+                        log.info("[%s] %s %s", frame.camera_id, event.priority, event.event_type)
                         if self._metrics is not None:
                             self._metrics.record_event(frame.camera_id)
-                        if self._ptz is not None and event.priority == "critical" and event.object_id is not None:
+                        if (
+                            self._ptz is not None
+                            and event.priority == "critical"
+                            and event.object_id is not None
+                        ):
                             track = next(
                                 (t for t in tracked if t.object_id == event.object_id), None
                             )
                             if track is not None:
                                 h, w = frame.image.shape[:2]
                                 self._ptz.track(track.centroid, (w, h))
-                        if self.on_event is not None:
-                            self.on_event(event)
+                    if events:
+                        self._queue_events(events)
                 if self.on_tracks is not None:
                     self.on_tracks(frame.camera_id, frame, tracked)
             except Exception:
                 log.exception("[%s] processing error at frame %d", frame.camera_id, frame.seq)
 
+    def _queue_events(self, events: list[Event]) -> None:
+        clip_frames = None
+        if self.clip_buffer is not None and any(
+            str(event.priority) in _CLIP_PRIORITIES for event in events
+        ):
+            clip_frames = self.clip_buffer.snapshot()
+        try:
+            self._event_queue.put_nowait((events, clip_frames))
+        except queue.Full:
+            # Never lose an alert because evidence generation is overloaded.
+            log.warning("[%s] event queue full; publishing without clip", self.source.camera_id)
+            self._publish_events(events)
+
+    def _event_loop(self) -> None:
+        while not self._event_stop.is_set() or not self._event_queue.empty():
+            try:
+                events, clip_frames = self._event_queue.get(timeout=0.25)
+            except queue.Empty:
+                continue
+            try:
+                if clip_frames is not None and self.clip_buffer is not None:
+                    clip = self.clip_buffer.render_mp4(clip_frames)
+                    for event in events:
+                        if str(event.priority) in _CLIP_PRIORITIES:
+                            event.clip = clip
+                self._publish_events(events)
+            except Exception:
+                log.exception("[%s] event publication failed", self.source.camera_id)
+            finally:
+                self._event_queue.task_done()
+
+    def _publish_events(self, events: list[Event]) -> None:
+        if self.on_event is None:
+            return
+        for event in events:
+            try:
+                self.on_event(event)
+            except Exception:
+                log.exception("[%s] event callback failed", self.source.camera_id)
+
     def start(self) -> None:
+        self._event_thread.start()
         self._capture_thread.start()
         self._worker_thread.start()
 
@@ -158,6 +206,8 @@ class StreamPipeline:
         self.source.stop()
         self._capture_thread.join(timeout=timeout)
         self._worker_thread.join(timeout=timeout)
+        self._event_stop.set()
+        self._event_thread.join(timeout=timeout)
 
     @property
     def alive(self) -> bool:

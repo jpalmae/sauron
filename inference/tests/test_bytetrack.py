@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from sauron_inference.config import TrackerConfig
-from sauron_inference.tracking.bytetrack import BYTETracker, STrack
+from sauron_inference.tracking.bytetrack import BYTETracker, STrack, fuse_score
 from sauron_inference.types import Detection
 
 
@@ -88,3 +88,18 @@ def test_velocity_reported_after_motion():
     vx, vy = tracks[0].velocity
     assert vx > 0
     assert abs(vy) < abs(vx)
+
+
+def test_score_fusion_does_not_match_disjoint_boxes():
+    # IoU distance 1.0 must remain an impossible match even at high confidence.
+    candidate = STrack(np.array([0, 0, 10, 10]), 0.99, 2, "car")
+    fused = fuse_score(np.array([[1.0]]), [candidate])
+    assert fused[0, 0] == pytest.approx(1.0)
+
+
+def test_tracker_does_not_reuse_id_across_classes():
+    tracker = BYTETracker(TrackerConfig(), frame_rate=15)
+    car = tracker.update([det(100, 200, cls=2, name="car")])[0]
+    bus = tracker.update([det(100, 200, cls=5, name="bus")])[0]
+    assert bus.track_id != car.track_id
+    assert bus.class_name == "bus"

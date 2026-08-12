@@ -1,61 +1,36 @@
 # Sauron — Video Analytics Platform
 
-Analítica de video en tiempo real para HPE GreenLake (edge GPU NVIDIA L4):
-ingesta multi-canal RTSP → detección YOLOv8 (TensorRT) → tracking ByteTrack →
-reglas espacio-temporales → alertas en vivo, KPIs y reportería.
+Analítica de video en tiempo real para HPE GreenLake sobre NVIDIA DeepStream:
+ingesta multi-canal → TrafficCamNet (TAO/TensorRT) → tracking NvDCF →
+VehicleTypeNet (TAO/TensorRT) → reglas, alertas, KPIs y reportería.
 
 ## Arquitectura
 
 ```
-[RTSP cams] → [inference] ──eventos──> [Redis] ──> [api consumer] ──> [TimescaleDB]
-  GPU L4        TensorRT+ByteTrack        pub/sub       FastAPI    ├─> [MinIO] snapshots/clips
-              rules engine + clips MP4                    └─ WS /ws/alerts ─> [web dashboard]
+[RTSP/HLS] → [DeepStream] ──Redis Stream──> [API] ──> [TimescaleDB]
+             NVDEC + TAO                    FastAPI       └─ WS ─> [dashboard]
+             NvDCF + TensorRT
 ```
 
-- `inference/` — pipeline de video (Python 3.11, TensorRT, GStreamer/NVDEC, ByteTrack, rules, clips)
+- `deepstream/` — plano de video (Service Maker, TrafficCamNet, VehicleTypeNet, NvDCF)
+- `inference/` — implementación histórica, excluida de la imagen y del runtime DeepStream
 - `api/` — FastAPI async: cámaras, eventos, KPIs, reportes CSV, branding, WebSocket
 - `web/` — dashboard React (Vite + Tailwind v4 + Recharts), white-label
 - `deploy/` — Dockerfiles, Helm chart, prometheus.yml, mediamtx.yml
 
-## Quickstart (host GPU)
+## Quickstart GPU
 
 ```bash
-cp .env.example .env                     # editar secretos (DB, MinIO, JWT, admin)
-docker compose up -d                     # infra + api + web  → http://localhost:8080
-# engine TensorRT (una vez, en el host L4):
-pip install ultralytics tensorrt cuda-python
-python inference/tools/build_engine.py --weights yolov8n.pt --out models/yolov8n_fp16.engine --fp16
-cp inference/configs/pipeline.example.yaml inference/configs/pipeline.yaml  # editar cámaras/ROIs
-docker compose --profile gpu up -d inference
-docker compose --profile streaming up -d mediamtx      # live grid WebRTC (opcional)
-docker compose --profile observability up -d prometheus # métricas (opcional)
+cp .env.example .env
+docker compose -f docker-compose.yml -f docker-compose.deepstream.yml \
+  --profile gpu up -d --build
 ```
 
 Login: `ADMIN_EMAIL` / `ADMIN_PASSWORD` del `.env` (admin bootstrap en el primer arranque).
 
-### Demo local sin GPU (Mac/Linux, CPU)
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.local.yml --profile local up -d --build
-# dashboard en http://localhost:8080 (admin@sauron.local / admin123 con el .env de demo)
-```
-
-La demo levanta 3 cámaras preconfiguradas (seed): 2 sintéticas (conteo y
-congestión garantizados) y **Shinjuku Live** — cámara pública de tráfico en
-Tokio vía YouTube Live (prefijo `yt:` en `source`; yt-dlp resuelve y refresca
-el manifiesto HLS solo) con detección real ONNX en CPU (`detector.backend:
-onnx`, yolov8n en `inference/models/`, ~35 ms/frame).
-
-### Backends de detección
-
-`detector.backend` en `pipeline.yaml` (global o por stream):
-
-| backend | uso |
-|---|---|
-| `tensorrt` | GPU local, 10–15 FPS/stream (default, producción L4) |
-| `onnx` | CPU via OpenCV DNN, sin deps extra — demos/desarrollo (~5–15 FPS) |
-| `openai` | endpoint OpenAI-compatible (vLLM, Ollama, OpenAI): `base_url` + `model`; key vía env `OPENAI_API_KEY` |
-| `mock` | CI/desarrollo |
+La imagen oficial de DeepStream incluye los modelos TAO. En el primer arranque
+se compilan motores FP16 específicos para la GPU y el tamaño de lote; el
+volumen `deepstream-engines` los conserva para reinicios posteriores.
 
 ## Autenticación
 
@@ -65,29 +40,12 @@ login). La ingesta directa (`POST /api/v1/events`) acepta `SAURON_INGEST_TOKEN`
 o JWT de admin; la vía Redis es interna al cluster. El WS usa `?token=`.
 Crear usuarios: tabla `users` (hash argon2) — endpoint de gestión en backlog.
 
-## Inferencia local o remota
+## Modelos NVIDIA
 
-Tabla de backends arriba. Fuentes soportadas: `rtsp://`, archivos de video,
-`synthetic` y `yt:<youtube-watch-url>` (cámaras live públicas; extra `live`).
-
-## Modelos de detección
-
-Catálogo horneado en las imágenes (sin descargas en runtime): **yolov8n/s/m**
-y **yolo11n/s**. Selección en `pipeline.yaml`:
-
-```yaml
-defaults:
-  model: yolov8n        # global
-streams:
-  - id: cam-01
-    model: yolo11s      # override por stream
-```
-
-- Backend `onnx` (CPU): usa el `.onnx` del catálogo directamente.
-- Backend `tensorrt` (GPU L4): `ensure_models` construye el `.engine` FP16 del
-  modelo elegido en el primer arranque del host (volumen `models`).
-- Regenerar el catálogo: `python inference/tools/export_models.py`
-  (requiere ultralytics; en CI corre automático antes del build con cache).
+- `TrafficCamNet` detecta `car`, `bicycle`, `person` y `road_sign`.
+- `VehicleTypeNet` clasifica vehículos en `coupe`, `largevehicle`, `sedan`,
+  `suv`, `truck` y `van`.
+- `NvDCF` mantiene identidades y trayectorias en GPU.
 
 ## Calibración
 
@@ -99,15 +57,12 @@ medidas reales en metros (ancho/alto). La velocidad se calcula como
 **Líneas de conteo**: herramienta *Línea* (2 clicks); la dirección forward se
 define con la herramienta *Dirección* (click hacia el flujo).
 
-**INT8** (mayor throughput, requiere ~500 frames de producción):
-```bash
-python inference/tools/build_engine.py --weights yolov8n.pt --out models/yolov8n_int8.engine --int8 --calib-data /data/calib
-```
-
 ## Pruebas de carga y métricas
 
 ```bash
-python inference/tools/load_test.py --streams 20 --fps 15 --duration 60   # XS
+curl http://localhost:9100/healthz
+curl http://localhost:9100/metrics
+nvidia-smi
 ```
 Targets: ≥90% del FPS objetivo por stream, latencia de alerta < 2 s.
 
@@ -145,9 +100,8 @@ python inference/tools/onvif_discover.py --user admin --password secret
   críticos por N segundos y vuelve al preset; cooldown anti-oscilación.
 - **Audio analytics**: `stream.audio.enabled` — tap PCM vía ffmpeg, detector
   de picos RMS sobre baseline → `AUDIO_ANOMALY`.
-- **Loop de mejora**: feedback por evento (✓/falso positivo en la GUI) +
-  `GET /api/v1/reports/dataset.zip` exporta YOLO dataset (labels desde
-  metadata; falsos positivos como negativos duros) listo para fine-tuning.
+- **Loop de mejora**: feedback por evento (✓/falso positivo en la GUI) y
+  exportación de evidencia para recalibrar o reentrenar modelos TAO.
 - **HA active/standby**: `SAURON_HA_ENABLED=true` + N réplicas de inference —
   leader election por Redis (TTL 15s), takeover automático.
 

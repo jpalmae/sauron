@@ -208,7 +208,10 @@ async def dataset_zip(
     storage = get_storage()
     items: list[tuple[bytes, str]] = []
     for row in rows:
-        data = await storage.download_bytes(row.snapshot_key)
+        snapshot_key = row.snapshot_key
+        if not snapshot_key:
+            continue
+        data = await storage.download_bytes(snapshot_key)
         if not data:
             continue
         if row.feedback == "false_positive":

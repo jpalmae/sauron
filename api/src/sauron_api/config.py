@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://sauron:sauron@localhost:5432/sauron"
     redis_url: str = "redis://localhost:6379/0"
     redis_events_channel: str = "sauron:events"
+    redis_events_stream: str = "sauron:events:stream"
+    redis_events_group: str = "sauron-api"
+    redis_events_consumer: str = "api-1"
     consumer_enabled: bool = True
 
     s3_endpoint: str = ""  # empty disables snapshot storage (dev)

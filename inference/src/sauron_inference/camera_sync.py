@@ -66,9 +66,7 @@ class APICameraSource:
                     target_fps=self.target_fps,
                     model=cam.get("model") or None,
                     detector=(
-                        DetectorConfig(backend=cam["detector"])
-                        if cam.get("detector")
-                        else None
+                        DetectorConfig(backend=cam["detector"]) if cam.get("detector") else None
                     ),
                     roi=roi,
                 )
@@ -86,8 +84,8 @@ class APICameraSource:
                 return None
             data = resp.json()
             return data.get("defaults") or {}, int(data.get("target_fps") or 0)
-        except Exception:
-            log.debug("engine config fetch failed")
+        except (httpx.HTTPError, TypeError, ValueError):
+            log.debug("engine config fetch failed", exc_info=True)
             return None
 
     def close(self) -> None:
