@@ -60,7 +60,7 @@ class OpenAIDetectorConfig(BaseModel):
 
 
 class DetectorConfig(BaseModel):
-    backend: Literal["tensorrt", "onnx", "openai", "mock", "pose", "pose_objects"] = "tensorrt"
+    backend: Literal["tensorrt", "onnx", "openai", "mock", "pose", "pose_objects", "ultralytics_pose", "keypoint_rcnn", "fasterrcnn"] = "tensorrt"
     openai: OpenAIDetectorConfig = Field(default_factory=OpenAIDetectorConfig)
 
 

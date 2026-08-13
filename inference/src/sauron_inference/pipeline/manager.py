@@ -147,6 +147,27 @@ def build_detector(stream: StreamConfig, cfg: PipelineConfig, device_id: int) ->
             pose_classes={0: "person"},
             objects_classes=cfg.defaults.classes,
         )
+    if det_cfg.backend == "ultralytics_pose":
+        from ..detection.ultralytics_pose import UltralyticsPoseDetector
+        return UltralyticsPoseDetector(
+            model_path="yolov8n-pose.pt",
+            input_size=cfg.defaults.input_size,
+            conf_threshold=conf,
+            classes=cfg.defaults.classes,
+        )
+    if det_cfg.backend == "keypoint_rcnn":
+        from ..detection.keypoint_rcnn import KeypointRCNNDetector
+        return KeypointRCNNDetector(
+            conf_threshold=conf,
+            classes=cfg.defaults.classes,
+        )
+    if det_cfg.backend == "fasterrcnn":
+        from ..detection.torchvision_detector import TorchvisionDetector
+        return TorchvisionDetector(
+            model_path=stream.model or "",
+            conf_threshold=conf,
+            classes=cfg.defaults.classes,
+        )
     if det_cfg.backend == "openai":
         return OpenAICompatDetector(
             det_cfg.openai, classes=cfg.defaults.classes, conf_threshold=conf
