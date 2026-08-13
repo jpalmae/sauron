@@ -5,7 +5,7 @@
 services:
   api:
     environment:
-      SAURON_SEED_CAMERAS_PATH: /seed/cameras.json
+      # SAURON_SEED_CAMERAS_PATH: /seed/cameras.json
       # Live preview: RTSP cameras se sirven via go2rtc (WHEP) a traves del nginx /go2rtc/
       SAURON_LIVE_GO2RTC_ENABLED: "true"
     volumes:
@@ -21,9 +21,15 @@ services:
     profiles: ["local"]
     build:
       context: .
-      dockerfile: deploy/docker/inference.local.Dockerfile
-    image: sauron/inference:local
+      dockerfile: deploy/docker/inference.gpu.Dockerfile
+    image: sauron/inference:gpu
     restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: [gpu]
     environment:
       SAURON_REDIS_URL: redis://redis:6379/0
       # GUI-driven cameras: inference polls the API and reconciles streams.
@@ -44,3 +50,9 @@ services:
     command: ["run", "-c", "configs/pipeline.local.yaml"]
 
   # go2rtc config is shared via ./deploy/go2rtc (see main compose)
+
+  timescaledb:
+    ports: !reset []
+
+  go2rtc:
+    network_mode: host
