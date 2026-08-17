@@ -18,6 +18,10 @@ PolygonRuleName = Literal[
 ]
 
 
+def _default_polygon_rules() -> list[PolygonRuleName]:
+    return ["stopped"]
+
+
 class LineConfig(BaseModel):
     id: str
     points: list[Point]
@@ -36,7 +40,7 @@ class PolygonConfig(BaseModel):
     id: str
     points: list[Point]
     kind: Literal["lane", "parking", "counting"] = "lane"
-    rules: list[PolygonRuleName] = Field(default_factory=lambda: ["stopped"])
+    rules: list[PolygonRuleName] = Field(default_factory=_default_polygon_rules)
     direction: Point | None = None
 
     @field_validator("points")

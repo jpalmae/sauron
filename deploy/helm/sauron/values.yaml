@@ -10,27 +10,33 @@ branding:
   primaryColor: "#0E7C66"
   domain: ""              # e.g. vision.cliente.com — enables Ingress + TLS
 
-# Sizing profile: xs (1 GPU / 20 streams), s (2 / 40), m (3 / 60)
+# Sizing profile: xs (1 L4 / 20 streams), s (2 / 40), m (3 / 60)
 profile: xs
 
-inference:
+deepstream:
   enabled: true
-  gpus: 1                 # NVIDIA L4 devices (nvidia.com/gpu)
-  image: sauron/inference
+  # 0 selects the replica count from `profile`; every replica owns one GPU.
+  replicas: 0
+  maxStreamsPerGpu: 20
+  image: sauron/deepstream
   metricsPort: 9100
+  sourceRestPort: 9010
+  targetFps: 10
+  inferenceInterval: 0
+  secondaryBatch: 64
+  sourcePollSeconds: 15
+  sourceStaleSeconds: 45
+  recoveryCooldownSeconds: 45
+  recoveryAttempts: 3
   nodeSelector: {}        # e.g. { hpe.com/gpu: "l4" }
-  config: |
-    app:
-      name: sauron
-      redis_url: "redis://sauron-redis:6379/0"
-    devices: [0]
-    defaults:
-      engine_path: models/yolov8n_fp16.engine
-      confidence_threshold: 0.50
-      clips:
-        enabled: true
-        preroll_seconds: 8
-    streams: []
+  persistence:
+    size: 10Gi
+  resources:
+    requests:
+      cpu: "4"
+      memory: 8Gi
+    limits:
+      memory: 16Gi
 
 api:
   replicas: 1
@@ -43,14 +49,31 @@ web:
 # Bundled infra is for evaluation. In production point these at managed
 # services / operators (CloudNativePG, Redis operator, MinIO operator).
 database:
-  url: postgresql+asyncpg://sauron:changeme@sauron-timescaledb:5432/sauron
+  host: sauron-timescaledb
+  port: 5432
+  name: sauron
+  user: sauron
 redis:
   url: redis://sauron-redis:6379/0
 s3:
   endpoint: sauron-minio:9000
   bucket: sauron-events
   accessKey: sauron
-  secretKey: changeme
+
+auth:
+  enabled: true
+  adminEmail: admin@sauron.local
+
+# Evaluation defaults only. In production set create=false, provide an
+# existing Secret with these five keys, and never keep credentials in values.
+secrets:
+  create: true
+  name: sauron-secrets
+  postgresPassword: change-me
+  s3SecretKey: change-me
+  ingestToken: change-me
+  jwtSecret: change-me
+  adminPassword: change-me
 
 persistence:
   storageClass: ""        # cluster default

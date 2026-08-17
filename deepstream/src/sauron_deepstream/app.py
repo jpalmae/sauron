@@ -50,6 +50,8 @@ def run() -> None:
         settings.source_rest_port,
         settings.source_poll_seconds,
         settings.max_streams,
+        settings.shard_index,
+        settings.shard_count,
         registry,
         metrics,
         settings.source_stale_seconds,
@@ -129,10 +131,12 @@ def run() -> None:
         metrics.ready = True
         controller.start()
         log.info(
-            "DeepStream active: max_streams=%d batch=%d GPU=%d",
+            "DeepStream active: max_streams=%d batch=%d GPU=%d shard=%d/%d",
             settings.max_streams,
             settings.max_streams,
             settings.gpu_id,
+            settings.shard_index,
+            settings.shard_count,
         )
         pipeline.wait()
     finally:

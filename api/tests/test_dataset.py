@@ -1,25 +1,26 @@
 import io
+import json
 import time
 import uuid
 import zipfile
 
-from sauron_api.dataset import build_dataset_zip, yolo_label
+from sauron_api.dataset import CocoImage, build_coco_dataset_zip
 
 
-def test_yolo_label_normalizes():
-    # bbox xyxy [320,180,960,540] en 1280x720 -> centro 0.5,0.5 w=0.5 h=0.5
-    assert yolo_label(0, [320, 180, 960, 540], 1280, 720) == "0 0.500000 0.500000 0.500000 0.500000"
-
-
-def test_dataset_zip_contents():
-    items = [(b"\xff\xd8\xff\xfakejpg", "0 0.5 0.5 0.5 0.5"), (b"\xff\xd8\xff\xfake2", "")]
-    content = build_dataset_zip(items)
+def test_coco_dataset_zip_contents():
+    items = [
+        CocoImage(b"\xff\xd8\xff\xfakejpg", 1280, 720, [("car", [320, 180, 960, 540])]),
+        CocoImage(b"\xff\xd8\xff\xfake2", 1280, 720),
+    ]
+    content = build_coco_dataset_zip(items)
     with zipfile.ZipFile(io.BytesIO(content)) as zf:
         names = zf.namelist()
-        assert "images/img_00000.jpg" in names
-        assert "labels/img_00001.txt" in names
-        assert "dataset.yaml" in names
-        assert zf.read("labels/img_00001.txt") == b""
+        assert "images/img_00001.jpg" in names
+        assert "images/img_00002.jpg" in names
+        payload = json.loads(zf.read("annotations/instances.json"))
+        assert payload["annotations"][0]["bbox"] == [320.0, 180.0, 640.0, 360.0]
+        assert payload["annotations"][0]["area"] == 230400.0
+        assert len(payload["images"]) == 2
 
 
 async def test_feedback_endpoint(client):

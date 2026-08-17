@@ -1,25 +1,33 @@
 name: sauron
 
 services:
-  inference:
+  deepstream:
     build:
       context: .
-      dockerfile: deploy/docker/inference.Dockerfile
-    image: sauron/inference:0.1.0
+      dockerfile: deploy/docker/deepstream.Dockerfile
+    image: sauron/deepstream:0.1.0
     profiles: ["gpu"] # requires nvidia-container-toolkit on the host
     restart: unless-stopped
     environment:
       NVIDIA_VISIBLE_DEVICES: all
       NVIDIA_DRIVER_CAPABILITIES: compute,video,utility
-      # event sink: Redis (default) or direct API ingest — comment one out
       SAURON_REDIS_URL: redis://redis:6379/0
       SAURON_API_URL: http://api:8000
       SAURON_INGEST_TOKEN: ${INGEST_TOKEN}
-      SAURON_API_CAMERAS_FPS: "5"
-      SAURON_API_CAMERAS_POLL_S: "15"
-      # SAURON_API_INGEST_URL: http://api:8000
-      # only for detector.backend=openai:
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      SAURON_DS_ROOT: /app/deepstream
+      SAURON_DS_ENGINE_DIR: /models/deepstream
+      SAURON_DS_MAX_STREAMS: ${DEEPSTREAM_MAX_STREAMS:-20}
+      SAURON_DS_SHARD_INDEX: "0"
+      SAURON_DS_SHARD_COUNT: "1"
+      SAURON_DS_SECONDARY_BATCH: ${DEEPSTREAM_SECONDARY_BATCH:-64}
+      SAURON_DS_TARGET_FPS: ${DEEPSTREAM_TARGET_FPS:-10}
+      SAURON_DS_INFERENCE_INTERVAL: ${DEEPSTREAM_INFERENCE_INTERVAL:-0}
+      SAURON_DS_SOURCE_POLL_S: "15"
+      SAURON_DS_SOURCE_STALE_S: "45"
+      SAURON_DS_RECOVERY_COOLDOWN_S: "45"
+      SAURON_DS_RECOVERY_ATTEMPTS: "3"
+      SAURON_DS_SOURCE_REST_PORT: "9010"
+      SAURON_DS_HEALTH_PORT: "9100"
     deploy:
       resources:
         reservations:
@@ -27,19 +35,18 @@ services:
             - driver: nvidia
               capabilities: [gpu, video]
     volumes:
-      - ./inference/configs:/app/configs:ro
-      - models:/app/models
+      - deepstream-engines:/models
     ports:
       - "9100:9100" # prometheus metrics + healthz
     healthcheck:
-      test: ["CMD", "/opt/venv/bin/python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:9100/healthz')"]
+      test: ["CMD", "/opt/sauron/bin/python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:9100/healthz')"]
       interval: 15s
       timeout: 5s
-      retries: 5
+      retries: 12
+      start_period: 15m
     depends_on:
       redis:
         condition: service_healthy
-    command: ["run", "-c", "configs/pipeline.yaml"]
 
   api:
     build:
@@ -201,5 +208,5 @@ volumes:
   timescale-data:
   redis-data:
   minio-data:
-  models:
+  deepstream-engines:
   prometheus-data:

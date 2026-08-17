@@ -43,8 +43,7 @@ class Camera(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
-    detector: Mapped[str | None] = mapped_column(String(30), nullable=True)
-    model: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    analytics_profile: Mapped[str] = mapped_column(String(20), default="traffic")
 
 
 class AnalyticsEvent(Base):
@@ -95,14 +94,6 @@ class HourlyKpi(Base):
     avg_speed_kmh: Mapped[float | None] = mapped_column(Float, nullable=True)
     congestion_minutes: Mapped[int] = mapped_column(Integer, default=0)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
-
-
-class EngineConfig(Base):
-    __tablename__ = "engine_config"
-    id: Mapped[int] = mapped_column(primary_key=True, default=1)
-    defaults: Mapped[dict] = mapped_column(JSONBCompat, nullable=False)
-    target_fps: Mapped[int] = mapped_column(Integer, default=5)
-    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class User(Base):

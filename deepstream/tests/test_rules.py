@@ -2,11 +2,17 @@ from sauron_deepstream.domain import Frame, ROIConfig, TrackedObject
 from sauron_deepstream.rules import RulesEngine
 
 
-def _track(object_id: int, point: tuple[float, float], history=None, velocity=(0.0, 0.0)):
+def _track(
+    object_id: int,
+    point: tuple[float, float],
+    history=None,
+    velocity=(0.0, 0.0),
+    class_name="car",
+):
     return TrackedObject(
         object_id=object_id,
         camera_id="cam",
-        class_name="car",
+        class_name=class_name,
         class_id=0,
         bbox=(point[0] - 5, point[1] - 5, point[0] + 5, point[1] + 5),
         score=0.9,
@@ -53,6 +59,34 @@ def test_stopped_vehicle_uses_tracker_time():
 
     assert len(events) == 1
     assert str(events[0].event_type) == "STOPPED_VEHICLE"
+
+
+def test_people_occupancy_emits_periodic_count():
+    roi = ROIConfig.model_validate(
+        {
+            "polygons": [
+                {
+                    "id": "lobby",
+                    "points": [[0, 0], [100, 0], [100, 100], [0, 100]],
+                    "rules": ["occupancy"],
+                }
+            ],
+            "thresholds": {"occupancy_interval_s": 10},
+        }
+    )
+    engine = RulesEngine("cam", roi, fps=10)
+
+    events = engine.process(
+        Frame("cam", 1, 1.0),
+        [_track(1, (25, 25), class_name="person"), _track(2, (50, 50))],
+    )
+    assert len(events) == 1
+    assert str(events[0].event_type) == "OCCUPANCY"
+    assert events[0].metadata["count"] == 1
+    assert events[0].metadata["unique_total"] == 1
+    assert engine.process(
+        Frame("cam", 2, 5.0), [_track(1, (30, 25), class_name="person")]
+    ) == []
 
 
 def test_source_domain_has_no_pixel_evidence_fields():

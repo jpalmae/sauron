@@ -18,9 +18,7 @@ from .routers import (
     corridors,
     events,
     kpis,
-    models,
     notifications,
-    pipeline_config,
     push,
     reports,
     search,
@@ -72,7 +70,6 @@ def create_app() -> FastAPI:
     app.include_router(cameras.router, prefix="/api/v1")
     app.include_router(events.router, prefix="/api/v1")
     app.include_router(kpis.router, prefix="/api/v1")
-    app.include_router(models.router, prefix="/api/v1")
     app.include_router(corridors.router, prefix="/api/v1")
     app.include_router(notifications.router, prefix="/api/v1")
     app.include_router(push.router, prefix="/api/v1")
@@ -80,7 +77,6 @@ def create_app() -> FastAPI:
     app.include_router(reports.router, prefix="/api/v1")
     app.include_router(streams.router, prefix="/api/v1")
     app.include_router(branding.router, prefix="/api/v1")
-    app.include_router(pipeline_config.router, prefix="/api/v1")
     app.include_router(ws_router)
 
     @app.get("/healthz")

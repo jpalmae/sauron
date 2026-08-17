@@ -1,0 +1,106 @@
+{{- if .Values.deepstream.enabled }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: sauron-deepstream
+spec:
+  serviceName: sauron-deepstream
+  replicas: {{ include "sauron.deepstream.replicas" . }}
+  selector:
+    matchLabels: { app: sauron-deepstream }
+  template:
+    metadata:
+      labels: { app: sauron-deepstream }
+    spec:
+      nodeSelector:
+{{ toYaml .Values.deepstream.nodeSelector | indent 8 }}
+      containers:
+        - name: deepstream
+          image: {{ include "sauron.image" (dict "Values" .Values "repository" .Values.deepstream.image) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: metrics
+              containerPort: {{ .Values.deepstream.metricsPort }}
+            - name: sources
+              containerPort: {{ .Values.deepstream.sourceRestPort }}
+          env:
+            - name: NVIDIA_DRIVER_CAPABILITIES
+              value: compute,video,utility
+            - name: SAURON_REDIS_URL
+              value: {{ .Values.redis.url | quote }}
+            - name: SAURON_API_URL
+              value: http://sauron-api:8000
+            - name: SAURON_INGEST_TOKEN
+              valueFrom:
+                secretKeyRef: { name: {{ .Values.secrets.name }}, key: ingest-token }
+            - name: SAURON_DS_ROOT
+              value: /app/deepstream
+            - name: SAURON_DS_ENGINE_DIR
+              value: /models/deepstream
+            - name: SAURON_DS_MAX_STREAMS
+              value: {{ .Values.deepstream.maxStreamsPerGpu | quote }}
+            - name: SAURON_DS_SHARD_COUNT
+              value: {{ include "sauron.deepstream.replicas" . | quote }}
+            - name: SAURON_DS_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: SAURON_DS_SECONDARY_BATCH
+              value: {{ .Values.deepstream.secondaryBatch | quote }}
+            - name: SAURON_DS_TARGET_FPS
+              value: {{ .Values.deepstream.targetFps | quote }}
+            - name: SAURON_DS_INFERENCE_INTERVAL
+              value: {{ .Values.deepstream.inferenceInterval | quote }}
+            - name: SAURON_DS_SOURCE_POLL_S
+              value: {{ .Values.deepstream.sourcePollSeconds | quote }}
+            - name: SAURON_DS_SOURCE_STALE_S
+              value: {{ .Values.deepstream.sourceStaleSeconds | quote }}
+            - name: SAURON_DS_RECOVERY_COOLDOWN_S
+              value: {{ .Values.deepstream.recoveryCooldownSeconds | quote }}
+            - name: SAURON_DS_RECOVERY_ATTEMPTS
+              value: {{ .Values.deepstream.recoveryAttempts | quote }}
+            - name: SAURON_DS_SOURCE_REST_PORT
+              value: {{ .Values.deepstream.sourceRestPort | quote }}
+            - name: SAURON_DS_HEALTH_PORT
+              value: {{ .Values.deepstream.metricsPort | quote }}
+          volumeMounts:
+            - name: engines
+              mountPath: /models
+          startupProbe:
+            httpGet: { path: /healthz, port: metrics }
+            periodSeconds: 15
+            failureThreshold: 60
+          livenessProbe:
+            httpGet: { path: /healthz, port: metrics }
+            periodSeconds: 15
+            failureThreshold: 4
+          resources:
+            requests:
+{{ toYaml .Values.deepstream.resources.requests | indent 14 }}
+            limits:
+{{ toYaml .Values.deepstream.resources.limits | indent 14 }}
+              nvidia.com/gpu: 1
+  volumeClaimTemplates:
+    - metadata:
+        name: engines
+      spec:
+        accessModes: [ReadWriteOnce]
+        {{- if .Values.persistence.storageClass }}
+        storageClassName: {{ .Values.persistence.storageClass }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.deepstream.persistence.size }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sauron-deepstream
+spec:
+  clusterIP: None
+  selector: { app: sauron-deepstream }
+  ports:
+    - name: metrics
+      port: {{ .Values.deepstream.metricsPort }}
+      targetPort: metrics
+{{- end }}

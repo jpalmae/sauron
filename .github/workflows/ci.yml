@@ -11,18 +11,18 @@ env:
   IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}/sauron
 
 jobs:
-  inference:
+  deepstream:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: inference
+        working-directory: deepstream
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
       - run: uv venv && uv pip install -e ".[dev]" --python .venv/bin/python
-      - run: .venv/bin/ruff check src tests tools
+      - run: .venv/bin/ruff check src tests
       - run: .venv/bin/python -m mypy src --ignore-missing-imports
       - run: .venv/bin/python -m pytest -q
 
@@ -67,7 +67,7 @@ jobs:
 
   images:
     runs-on: ubuntu-latest
-    needs: [inference, api, web, helm]
+    needs: [deepstream, api, web, helm]
     if: github.event_name == 'push'
     permissions:
       contents: read
@@ -81,21 +81,11 @@ jobs:
           - service: web
             dockerfile: deploy/docker/web.Dockerfile
             platforms: linux/amd64,linux/arm64
-          - service: inference
-            dockerfile: deploy/docker/inference.Dockerfile
+          - service: deepstream
+            dockerfile: deploy/docker/deepstream.Dockerfile
             platforms: linux/amd64
     steps:
       - uses: actions/checkout@v4
-      - name: Cache baked ONNX models
-        uses: actions/cache@v4
-        with:
-          path: inference/models
-          key: models-${{ hashFiles('inference/src/sauron_inference/models.py') }}
-      - name: Export ONNX catalog (cache miss)
-        working-directory: inference
-        run: |
-          pip install ultralytics onnx onnxslim
-          python tools/export_models.py
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:

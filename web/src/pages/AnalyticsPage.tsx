@@ -90,7 +90,7 @@ export default function AnalyticsPage({ domain }: { domain?: "traffic" | "people
         <h1 className="font-display text-xl font-semibold">Analítica de personas</h1>
         {filteredCameras.length === 0 ? (
           <p className="text-sm text-dim">
-            Sin cámaras de personas configuradas. Añade una cámara con detector de personas en <span className="text-mut">Cámaras</span>.
+            Sin cámaras de personas configuradas. Asigna el perfil Personas en <span className="text-mut">Cámaras</span>.
           </p>
         ) : (
           <div className="grid gap-4 md:grid-cols-2">
@@ -100,7 +100,7 @@ export default function AnalyticsPage({ domain }: { domain?: "traffic" | "people
           </div>
         )}
         <p className="text-xs text-dim">
-          Métricas de ocupación, postura y sillas provienen de los eventos de personas. Usa <span className="font-mono text-mut">Eventos · Personas</span> para el histórico.
+          La ocupación se calcula con detección de personas y seguimiento NvDCF. Usa <span className="font-mono text-mut">Eventos · Personas</span> para el histórico.
         </p>
       </div>
     );

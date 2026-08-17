@@ -100,7 +100,7 @@ export default function MapPage() {
                       <strong>{cam.name}</strong>
                       <div style={{ fontSize: 12, opacity: 0.75, marginTop: 4 }}>
                         {cam.stream_id} · {cam.is_active ? "activa" : "inactiva"}
-                        {cam.model && ` · ${cam.model}`}
+                        {` · DeepStream`}
                       </div>
                       {last && (
                         <div style={{ fontSize: 12, marginTop: 4 }}>

@@ -9,7 +9,6 @@ import Dashboard from "./pages/Dashboard";
 import EventsPage from "./pages/EventsPage";
 import LivePage from "./pages/LivePage";
 import LoginPage from "./pages/LoginPage";
-import EnginePage from "./pages/EnginePage";
 import MapPage from "./pages/MapPage";
 import NotificationsPage from "./pages/NotificationsPage";
 import RoiConfiguratorPage from "./pages/RoiConfiguratorPage";
@@ -50,7 +49,6 @@ export default function App() {
           <Route path="notifications" element={<NotificationsPage />} />
           <Route path="cameras" element={<CamerasPage />} />
           <Route path="cameras/:id/roi" element={<RoiConfiguratorPage />} />
-          <Route path="engine" element={<EnginePage />} />
         </Route>
       </Routes>
     </Router>

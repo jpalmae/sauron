@@ -39,8 +39,7 @@ async def seed_cameras(session: AsyncSession, path: str) -> int:
                     is_active=entry.get("is_active", True),
                     latitude=entry.get("latitude"),
                     longitude=entry.get("longitude"),
-                    detector=entry.get("detector"),
-                    model=entry.get("model"),
+                    analytics_profile=entry.get("analytics_profile", "traffic"),
                 )
             )
             created += 1
@@ -49,10 +48,8 @@ async def seed_cameras(session: AsyncSession, path: str) -> int:
             camera.rtsp_url = entry.get("rtsp_url", camera.rtsp_url)
             camera.latitude = entry.get("latitude", camera.latitude)
             camera.longitude = entry.get("longitude", camera.longitude)
-            if entry.get("detector") is not None:
-                camera.detector = entry["detector"]
-            if entry.get("model") is not None:
-                camera.model = entry["model"]
+            if entry.get("analytics_profile") is not None:
+                camera.analytics_profile = entry["analytics_profile"]
             if camera.roi_config is None and entry.get("roi_config"):
                 camera.roi_config = entry["roi_config"]
     await session.commit()

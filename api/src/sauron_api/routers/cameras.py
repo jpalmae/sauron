@@ -58,7 +58,7 @@ async def list_active_cameras(
     session: AsyncSession = Depends(get_session),
     _: None = Depends(require_ingest),
 ):
-    """Active cameras for the inference engine (ingest token or admin JWT)."""
+    """Active cameras for the DeepStream video plane (ingest token or admin JWT)."""
     result = await session.execute(
         select(Camera).where(Camera.is_active.is_(True)).order_by(Camera.name)
     )

@@ -20,8 +20,7 @@ export interface Camera {
   is_active: boolean;
   latitude: number | null;
   longitude: number | null;
-  detector: string | null;
-  model: string | null;
+  analytics_profile: "traffic" | "people";
 }
 
 export interface EventItem {
@@ -75,12 +74,6 @@ export interface OccupancyStats {
   occupied_seats: number | null;
   free_seats: number | null;
   seat_utilization: number | null;
-}
-
-export interface EngineConfig {
-  defaults: Record<string, unknown>;
-  target_fps: number;
-  updated_at: string | null;
 }
 
 export interface DetectionObj {
@@ -202,17 +195,12 @@ export const api = {
   datasetUrl: (feedback: string, cameraId?: string) => {
     const params = new URLSearchParams({ feedback });
     if (cameraId) params.set("camera_id", cameraId);
-    return `/api/v1/reports/dataset.zip?${params}`;
+    return `/api/v1/reports/dataset-coco.zip?${params}`;
   },
   liveUrl: (streamId: string) =>
     apiFetch<{ kind: "hls" | "whep" | "none"; url: string }>(
       `/api/v1/streams/${streamId}/live-url`,
     ),
-  models: () =>
-    apiFetch<{
-      models: { name: string; family: string; size_mb: number; profile: string }[];
-      backends: string[];
-    }>("/api/v1/models"),
   search: (q: string, cameraId?: string, limit = 24) => {
     const params = new URLSearchParams({ q, limit: String(limit) });
     if (cameraId) params.set("camera_id", cameraId);
@@ -261,9 +249,6 @@ export const api = {
     apiFetch<OccupancyStats>(`/api/v1/cameras/${cameraId}/occupancy`),
   detections: (cameraId: string) =>
     apiFetch<DetectionsPayload>(`/api/v1/cameras/${cameraId}/detections`),
-  pipelineConfig: () => apiFetch<EngineConfig>("/api/v1/pipeline-config"),
-  updatePipelineConfig: (body: { defaults: Record<string, unknown>; target_fps: number }) =>
-    apiFetch<EngineConfig>("/api/v1/pipeline-config", { method: "PUT", body: JSON.stringify(body) }),
   kpis: (cameraId: string | null, since: Date, until: Date, bucket: string) => {
     const params = new URLSearchParams({ bucket });
     if (cameraId) params.set("camera_id", cameraId);

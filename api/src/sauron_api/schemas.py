@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -15,8 +15,7 @@ class CameraCreate(BaseModel):
     is_active: bool = True
     latitude: float | None = None
     longitude: float | None = None
-    detector: str | None = None
-    model: str | None = None
+    analytics_profile: Literal["traffic", "people"] = "traffic"
 
 
 class CameraUpdate(BaseModel):
@@ -26,8 +25,7 @@ class CameraUpdate(BaseModel):
     is_active: bool | None = None
     latitude: float | None = None
     longitude: float | None = None
-    detector: str | None = None
-    model: str | None = None
+    analytics_profile: Literal["traffic", "people"] | None = None
 
 
 class CameraRead(BaseModel):
@@ -39,14 +37,13 @@ class CameraRead(BaseModel):
     is_active: bool
     latitude: float | None = None
     longitude: float | None = None
-    detector: str | None = None
-    model: str | None = None
+    analytics_profile: Literal["traffic", "people"] = "traffic"
 
     model_config = {"from_attributes": True}
 
 
 class EventIngest(BaseModel):
-    """Payload published by the inference service (Redis or direct POST)."""
+    """Payload published by the DeepStream video plane (Redis or direct POST)."""
 
     event_type: str
     camera_id: str  # stream_id, resolved to cameras.id at ingest

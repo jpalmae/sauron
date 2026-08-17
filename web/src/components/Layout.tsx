@@ -1,4 +1,4 @@
-import { Activity, Bell, Camera, Car, ChartColumn, LogOut, Map, ScrollText, Search, SlidersHorizontal, Users, Video, ChevronDown } from "lucide-react";
+import { Activity, Bell, Camera, Car, ChartColumn, LogOut, Map, ScrollText, Search, Users, Video, ChevronDown } from "lucide-react";
 import { useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { auth } from "../lib/api";
@@ -86,7 +86,6 @@ export default function Layout({ wsConnected }: { wsConnected: boolean }) {
           <NavItem to="/search" label="Búsqueda" icon={Search} />
           <NavItem to="/cameras" label="Cámaras" icon={Camera} />
           <NavItem to="/notifications" label="Notificaciones" icon={Bell} />
-          <NavItem to="/engine" label="Engine" icon={SlidersHorizontal} />
         </nav>
         <div className="mt-auto space-y-2 px-5 py-4">
           <div className="flex items-center gap-2 font-mono text-[11px] text-mut">

@@ -12,6 +12,7 @@ class Camera:
     stream_id: str
     name: str
     uri: str
+    analytics_profile: str
     roi: ROIConfig | None
 
 
@@ -70,5 +71,6 @@ def camera_from_api(payload: dict[str, Any], resolved_uri: str | None = None) ->
         stream_id=stream_id,
         name=str(payload.get("name") or stream_id),
         uri=resolved_uri or str(payload.get("rtsp_url") or ""),
+        analytics_profile=str(payload.get("analytics_profile") or "traffic"),
         roi=roi,
     )

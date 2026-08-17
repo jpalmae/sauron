@@ -89,8 +89,6 @@ function CameraForm({
 
 export default function CamerasPage() {
   const [cameras, setCameras] = useState<Camera[]>([]);
-  const [catalog, setCatalog] = useState<{ name: string; profile: string }[]>([]);
-  const [backends, setBackends] = useState<string[]>([]);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
@@ -100,13 +98,6 @@ export default function CamerasPage() {
   const reload = () => api.cameras().then(setCameras).catch(console.error);
   useEffect(() => {
     void reload();
-    api
-      .models()
-      .then((m) => {
-        setCatalog(m.models);
-        setBackends(m.backends);
-      })
-      .catch(console.error);
   }, []);
 
   return (
@@ -138,8 +129,7 @@ export default function CamerasPage() {
             initial={EMPTY}
             onSave={async (d) => {
               const { domain, ...rest } = d;
-              const patch = domain === "people" ? { detector: "pose_objects" as const, model: null } : { detector: "tensorrt" as const, model: "yolov8s" as const };
-              await api.createCamera({ ...rest, ...patch });
+              await api.createCamera({ ...rest, analytics_profile: domain });
               setCreating(false);
               await reload();
             }}
@@ -156,7 +146,7 @@ export default function CamerasPage() {
               <th className="px-4 py-2.5">stream_id</th>
               <th className="px-4 py-2.5">Dominio</th>
               <th className="px-4 py-2.5">ROI</th>
-              <th className="px-4 py-2.5">Backend / Modelo</th>
+              <th className="px-4 py-2.5">Pipeline</th>
               <th className="px-4 py-2.5">Estado</th>
               <th className="px-4 py-2.5" />
             </tr>
@@ -173,8 +163,7 @@ export default function CamerasPage() {
                       value={d}
                       onChange={async (e) => {
                         const nd = e.target.value as Domain;
-                        const patch = nd === "people" ? { detector: "pose_objects", model: null } : { detector: "tensorrt", model: "yolov8s" };
-                        await api.updateCamera(c.id, patch);
+                        await api.updateCamera(c.id, { analytics_profile: nd });
                         await reload();
                       }}
                       className={`rounded-full border px-2 py-0.5 font-mono text-[10px] ${DOMAIN_COLOR[d]}`}
@@ -189,40 +178,9 @@ export default function CamerasPage() {
                       : "sin configurar"}
                   </td>
                 <td className="px-4 py-2.5">
-                  <div className="flex gap-1.5">
-                    <select
-                      value={c.detector ?? ""}
-                      title="Backend de detección (rollout OTA)"
-                      onChange={async (e) => {
-                        await api.updateCamera(c.id, { detector: e.target.value || null });
-                        await reload();
-                      }}
-                      className="rounded border border-line bg-base px-1.5 py-1 font-mono text-[11px]"
-                    >
-                      <option value="">default</option>
-                      {backends.map((b) => (
-                        <option key={b} value={b}>
-                          {b}
-                        </option>
-                      ))}
-                    </select>
-                    <select
-                      value={c.model ?? ""}
-                      title="Modelo (catálogo)"
-                      onChange={async (e) => {
-                        await api.updateCamera(c.id, { model: e.target.value || null });
-                        await reload();
-                      }}
-                      className="rounded border border-line bg-base px-1.5 py-1 font-mono text-[11px]"
-                    >
-                      <option value="">default</option>
-                      {catalog.map((m) => (
-                        <option key={m.name} value={m.name}>
-                          {m.name} ({m.profile})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  <span className="rounded border border-line bg-base px-2 py-1 font-mono text-[10px] text-mut">
+                    DeepStream · NvDCF
+                  </span>
                 </td>
                 <td className="px-4 py-2.5">
                   <button
@@ -285,8 +243,7 @@ export default function CamerasPage() {
                       initial={{ name: c.name, stream_id: c.stream_id, rtsp_url: c.rtsp_url, domain: getCameraDomain(c) }}
                       onSave={async (d) => {
                         const { domain, ...rest } = d;
-                        const patch = domain === "people" ? { detector: "pose_objects", model: null } : { detector: "tensorrt", model: "yolov8s" };
-                        await api.updateCamera(c.id, { ...rest, ...patch });
+                        await api.updateCamera(c.id, { ...rest, analytics_profile: domain });
                         setEditing(null);
                         await reload();
                       }}

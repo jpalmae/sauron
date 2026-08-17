@@ -29,12 +29,7 @@ export function isPeopleEvent(e: EventItem | { event_type: string }): boolean {
 }
 
 export function getCameraDomain(camera: Camera): Domain {
-  const d = (camera.detector ?? "").toLowerCase();
-  if (d.includes("pose")) return "people";
-  // Fallback: model name hint — pose models contain "pose"
-  const m = (camera.model ?? "").toLowerCase();
-  if (m.includes("pose")) return "people";
-  return "traffic";
+  return camera.analytics_profile;
 }
 
 export function filterCamerasByDomain(cameras: Camera[], domain: Domain): Camera[] {

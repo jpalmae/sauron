@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import Any
+from typing import cast
 
 from .ingest import ingest_event
 from .metrics import metrics
@@ -70,11 +70,16 @@ async def _process_payload(payload: EventIngest) -> None:
                 )
 
 
-def _field(fields: dict[Any, Any], name: str) -> Any:
+RedisFields = dict[str | bytes, str | bytes]
+RedisMessage = tuple[str | bytes, RedisFields]
+RedisBatches = list[tuple[str | bytes, list[RedisMessage]]]
+
+
+def _field(fields: RedisFields, name: str) -> str | bytes | None:
     return fields.get(name, fields.get(name.encode()))
 
 
-def _has_messages(batches: list) -> bool:
+def _has_messages(batches: RedisBatches) -> bool:
     """Redis may return ``[[stream, []]]`` instead of an empty list."""
     return any(messages for _stream_name, messages in batches)
 
@@ -107,12 +112,15 @@ async def run_consumer(app) -> None:
             delay = 1.0
             read_id = "0"
             while True:
-                batches = await client.xreadgroup(
-                    group,
-                    consumer,
-                    {stream: read_id},
-                    count=20,
-                    block=1000 if read_id == ">" else None,
+                batches = cast(
+                    RedisBatches,
+                    await client.xreadgroup(
+                        group,
+                        consumer,
+                        {stream: read_id},
+                        count=20,
+                        block=1000 if read_id == ">" else None,
+                    ),
                 )
                 if not _has_messages(batches):
                     read_id = ">"
@@ -121,6 +129,8 @@ async def run_consumer(app) -> None:
                     for message_id, fields in messages:
                         try:
                             raw = _field(fields, "data")
+                            if raw is None:
+                                raise ValueError("Redis event has no data field")
                             payload = EventIngest.model_validate(json.loads(raw))
                         except Exception:
                             log.warning("discarding malformed event %r", message_id, exc_info=True)

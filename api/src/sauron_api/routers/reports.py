@@ -172,24 +172,19 @@ async def kpis_csv(
     return StreamingResponse(iter([buf.read()]), media_type="text/csv", headers=headers)
 
 
-@router.get("/dataset.zip")
-async def dataset_zip(
+@router.get("/dataset-coco.zip")
+async def dataset_coco_zip(
     session: AsyncSession = Depends(get_session),
     _: User = Depends(get_current_user),
     camera_id: uuid.UUID | None = None,
     feedback: str | None = None,
     limit: int = Query(500, le=2000),
 ):
-    """YOLO dataset zip from reviewed events (model improvement loop).
+    """TAO-compatible COCO dataset from reviewed event evidence.
 
-    - feedback=false_positive -> images with EMPTY label files (hard negatives)
-    - otherwise -> labels from metadata.bbox + vehicle_class/person
+    False positives are retained as hard-negative images without annotations.
     """
-    import zipfile  # noqa: F401 (used by builder)
-
-    from ..dataset import build_dataset_zip, yolo_label
-
-    class_ids = {"car": 0, "motorcycle": 1, "bus": 2, "truck": 3, "person": 4}
+    from ..dataset import CATEGORIES, CocoImage, build_coco_dataset_zip
 
     query = (
         select(AnalyticsEvent)
@@ -206,7 +201,7 @@ async def dataset_zip(
     rows = list((await session.execute(query)).scalars().all())
 
     storage = get_storage()
-    items: list[tuple[bytes, str]] = []
+    items: list[CocoImage] = []
     for row in rows:
         snapshot_key = row.snapshot_key
         if not snapshot_key:
@@ -214,18 +209,19 @@ async def dataset_zip(
         data = await storage.download_bytes(snapshot_key)
         if not data:
             continue
-        if row.feedback == "false_positive":
-            items.append((data, ""))  # hard negative
-            continue
         meta = row.extra or {}
+        width = int(meta.get("frame_width") or 1280)
+        height = int(meta.get("frame_height") or 720)
+        annotations: list[tuple[str, list[float]]] = []
         bbox = meta.get("bbox")
-        cls = meta.get("vehicle_class") or ("person" if "posture" in meta else None)
-        if bbox and cls in class_ids:
-            items.append((data, yolo_label(class_ids[cls], bbox, 1280, 720)))
+        class_name = meta.get("vehicle_class") or ("person" if "posture" in meta else None)
+        if row.feedback != "false_positive" and bbox and class_name in CATEGORIES:
+            annotations.append((class_name, bbox))
+        items.append(CocoImage(data, width, height, annotations))
 
-    content = build_dataset_zip(items)
+    content = build_coco_dataset_zip(items)
     return StreamingResponse(
         iter([content]),
         media_type="application/zip",
-        headers={"Content-Disposition": 'attachment; filename="dataset.zip"'},
+        headers={"Content-Disposition": 'attachment; filename="dataset-coco.zip"'},
     )

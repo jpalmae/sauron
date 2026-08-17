@@ -1,163 +1,159 @@
 # Sauron — Video Analytics Platform
 
-Analítica de video en tiempo real para HPE GreenLake sobre NVIDIA DeepStream:
-ingesta multi-canal → TrafficCamNet (TAO/TensorRT) → tracking NvDCF →
-VehicleTypeNet (TAO/TensorRT) → reglas, alertas, KPIs y reportería.
+Analítica de video en tiempo real para HPE GreenLake, implementada sobre
+NVIDIA DeepStream y modelos NVIDIA TAO.
 
 ## Arquitectura
 
-```
-[RTSP/HLS] → [DeepStream] ──Redis Stream──> [API] ──> [TimescaleDB]
-             NVDEC + TAO                    FastAPI       └─ WS ─> [dashboard]
-             NvDCF + TensorRT
+```text
+[RTSP/HLS] -> [DeepStream] --Redis Streams--> [FastAPI] -> [TimescaleDB]
+               NVDEC                         |             +-> MinIO
+               TrafficCamNet                 +-> WebSocket
+               NvDCF                         +-> Dashboard React
+               VehicleTypeNet
 ```
 
-- `deepstream/` — plano de video (Service Maker, TrafficCamNet, VehicleTypeNet, NvDCF)
-- `inference/` — implementación histórica, excluida de la imagen y del runtime DeepStream
-- `api/` — FastAPI async: cámaras, eventos, KPIs, reportes CSV, branding, WebSocket
-- `web/` — dashboard React (Vite + Tailwind v4 + Recharts), white-label
-- `deploy/` — Dockerfiles, Helm chart, prometheus.yml, mediamtx.yml
+- `deepstream/`: plano de video GPU, fuentes dinámicas, tracking y reglas.
+- `api/`: autenticación, cámaras, eventos, KPIs, alertas y reportes.
+- `web/`: dashboard, video WebRTC, overlays y configuración de ROI.
+- `deploy/`: imágenes, Helm, Prometheus y gateways de video.
 
-## Quickstart GPU
+Existe un solo runtime de analítica: DeepStream. La elección de backend o
+modelo no se expone por cámara; los cambios de modelo se entregan como una
+versión probada del plano de video.
+
+## Pipeline de video
+
+1. `nvmultiurisrcbin` agrega y retira cámaras activas desde la API.
+2. TrafficCamNet detecta automóviles, bicicletas, personas y señales.
+3. NvDCF mantiene IDs y trayectorias en GPU.
+4. VehicleTypeNet clasifica los vehículos detectados.
+5. Las reglas generan eventos y Redis desacopla el plano de video de la API.
+
+Analíticas actuales:
+
+- Conteo y dirección por cruce de línea.
+- Clasificación de vehículos.
+- Velocidad mediante homografía calibrada.
+- Vehículo detenido y obstrucción.
+- Sentido contrario.
+- Congestión por ocupación de ROI.
+- Ocupación básica de personas, sin pose ni reconocimiento biométrico.
+
+## Inicio con GPU
 
 ```bash
 cp .env.example .env
-docker compose -f docker-compose.yml -f docker-compose.deepstream.yml \
-  --profile gpu up -d --build
+docker compose --profile gpu up -d --build
 ```
 
-Login: `ADMIN_EMAIL` / `ADMIN_PASSWORD` del `.env` (admin bootstrap en el primer arranque).
+La imagen de DeepStream contiene los modelos TAO. Durante el primer arranque
+TensorRT compila engines FP16 para la GPU y el batch configurado; el volumen
+`deepstream-engines` los conserva entre recreaciones.
 
-La imagen oficial de DeepStream incluye los modelos TAO. En el primer arranque
-se compilan motores FP16 específicos para la GPU y el tamaño de lote; el
-volumen `deepstream-engines` los conserva para reinicios posteriores.
+Puertos locales:
 
-## Autenticación
+- Dashboard: `http://localhost:8080`
+- API: `http://localhost:8000`
+- Salud y métricas DeepStream: `http://localhost:9100/healthz` y `/metrics`
+- go2rtc: `http://localhost:1984`
 
-JWT con roles (`admin` escribe, `viewer` lee). `SAURON_AUTH_ENABLED=true` en
-compose. Endpoints públicos: `/healthz`, `/api/v1/branding` (para la página de
-login). La ingesta directa (`POST /api/v1/events`) acepta `SAURON_INGEST_TOKEN`
-o JWT de admin; la vía Redis es interna al cluster. El WS usa `?token=`.
-Crear usuarios: tabla `users` (hash argon2) — endpoint de gestión en backlog.
+El usuario inicial proviene de `ADMIN_EMAIL` y `ADMIN_PASSWORD`. No utilice los
+valores de ejemplo fuera de un entorno desechable.
 
-## Modelos NVIDIA
+## Cámaras y calibración
 
-- `TrafficCamNet` detecta `car`, `bicycle`, `person` y `road_sign`.
-- `VehicleTypeNet` clasifica vehículos en `coupe`, `largevehicle`, `sedan`,
-  `suv`, `truck` y `van`.
-- `NvDCF` mantiene identidades y trayectorias en GPU.
+Las cámaras activas se reconcilian desde `GET /api/v1/cameras/active`. Cada una
+tiene un perfil funcional (`traffic` o `people`), una URL RTSP/HLS y una
+configuración de ROI.
 
-## Calibración
+En el dashboard, `Cámaras -> ROI` permite definir:
 
-**Velocidad (homografía)**: en el dashboard → Cámaras → ROI → herramienta
-*Homografía*: marca 4 esquinas de un rectángulo del plano calzada e ingresa sus
-medidas reales en metros (ancho/alto). La velocidad se calcula como
-`|Δmundo| / Δt · 3.6` km/h por track.
+- Líneas de conteo y su dirección permitida.
+- Polígonos para detención, sentido contrario, congestión u ocupación.
+- Homografía mediante cuatro puntos y dimensiones reales de la calzada.
 
-**Líneas de conteo**: herramienta *Línea* (2 clicks); la dirección forward se
-define con la herramienta *Dirección* (click hacia el flujo).
+El watchdog considera una cámara estancada si deja de producir frames, intenta
+recrear la fuente y finalmente reinicia el proceso nativo para permitir la
+recuperación supervisada por Docker o Kubernetes.
 
-## Pruebas de carga y métricas
+## Perfiles XS/S/M
+
+| Perfil | NVIDIA L4 | Máximo de streams |
+| --- | ---: | ---: |
+| XS | 1 | 20 |
+| S | 2 | 40 |
+| M | 3 | 60 |
+
+Los perfiles S y M crean un StatefulSet con una réplica por GPU. Las cámaras se
+asignan de forma determinista entre réplicas y cada una mantiene sus propios
+engines TensorRT en un volumen persistente.
+
+Estos valores son límites de configuración, no una certificación de capacidad.
+Cada combinación de resolución, codec, FPS y analíticas debe superar una prueba
+de carga y estabilidad antes de comprometerse comercialmente.
+
+## Kubernetes / GreenLake
+
+Los secretos de evaluación vienen habilitados para que `helm lint/template`
+sean autocontenidos. Para producción, cree un Secret externo con las claves
+`postgres-password`, `s3-secret-key`, `ingest-token`, `jwt-secret` y
+`admin-password`, y desactive su creación desde values.
+
+```bash
+helm upgrade --install sauron deploy/helm/sauron \
+  --set profile=xs \
+  --set branding.domain=vision.cliente.com \
+  --set secrets.create=false \
+  --set secrets.name=sauron-secrets
+```
+
+La infraestructura incluida es apropiada para evaluación. En producción deben
+usarse PostgreSQL/Timescale, Redis y almacenamiento de objetos administrados u
+operados con respaldo y alta disponibilidad.
+
+## Observabilidad
 
 ```bash
 curl http://localhost:9100/healthz
 curl http://localhost:9100/metrics
 nvidia-smi
 ```
-Targets: ≥90% del FPS objetivo por stream, latencia de alerta < 2 s.
 
-Métricas Prometheus: inference `:9100/metrics` (fps, drops, tracks, eventos,
-latencia por cámara), api `:8000/metrics` (requests, latencias, eventos
-ingeridos). Scrape config en `deploy/prometheus.yml`.
+Las métricas incluyen FPS, frames, objetos, eventos, drops, estado por cámara y
+recuperaciones. El objetivo operativo inicial es al menos 90 % del FPS definido
+por stream y latencia de evento inferior a dos segundos.
 
-## Kubernetes (GreenLake)
+## Mejora del modelo
 
-```bash
-helm install sauron deploy/helm/sauron \
-  --set profile=s --set inference.gpus=2 \
-  --set branding.appName="Mi Cliente" --set branding.domain=vision.cliente.com
-```
-La infra embebida (TimescaleDB/Redis/MinIO) es para evaluación; en producción
-usar operadores (CloudNativePG, etc.) vía valores.
+Los eventos pueden marcarse como correctos o falsos positivos. La evidencia
+revisada se exporta en COCO, compatible con flujos de entrenamiento NVIDIA TAO:
 
-## ONVIF (descubrimiento de cámaras)
-
-```bash
-pip install -e "inference[onvif]"
-python inference/tools/onvif_discover.py --user admin --password secret
-# imprime un bloque streams: listo para pipeline.yaml
+```text
+GET /api/v1/reports/dataset-coco.zip
 ```
 
-## Features P2 (avanzado)
-
-- **Privacidad**: `roi.privacy.blur_faces/blur_plates` → redacción (blur) en
-  snapshots y clips antes de persistir (Ley 19.628 / GDPR).
-- **ReID multi-cámara / tiempo de viaje**: firmas HSV en cada `LINE_CROSSING`;
-  la API matchea contra cruces recientes de la cámara upstream del corredor
-  (`/api/v1/corridors`) → evento `TRAVEL_TIME` con `travel_time_s` y
-  `avg_speed_kmh`. Verificado en vivo: 300 s / 96 km/h.
-- **PTZ autotracking**: `stream.ptz` (ONVIF) — sigue el objeto de eventos
-  críticos por N segundos y vuelve al preset; cooldown anti-oscilación.
-- **Audio analytics**: `stream.audio.enabled` — tap PCM vía ffmpeg, detector
-  de picos RMS sobre baseline → `AUDIO_ANOMALY`.
-- **Loop de mejora**: feedback por evento (✓/falso positivo en la GUI) y
-  exportación de evidencia para recalibrar o reentrenar modelos TAO.
-- **HA active/standby**: `SAURON_HA_ENABLED=true` + N réplicas de inference —
-  leader election por Redis (TTL 15s), takeover automático.
-
-## Features P0 (operación)
-
-- **Notificaciones multicanal**: webhook / Telegram / email por canal con
-  prioridad mínima y filtro por cámara. CRUD + botón de prueba en
-  *Notificaciones*. Los secretos quedan enmascarados en la API.
-- **Salud de cámara**: `CAMERA_OFFLINE`/`CAMERA_ONLINE` automáticos si un
-  stream deja de producir frames (`SAURON_CAMERA_OFFLINE_S`, default 60s).
-- **Retención**: TimescaleDB `add_retention_policy` en `analytics_events`
-  (`SAURON_RETENTION_DAYS`) + lifecycle MinIO de evidencia
-  (`SAURON_S3_RETENTION_DAYS`). 0 = desactivado.
-- **SSO (MS365 / Google Workspace)**: Authorization Code + discovery + JWKS.
-  Configurar en `.env`:
-  ```
-  OIDC_PROVIDERS_JSON={"microsoft":{"issuer":"https://login.microsoftonline.com/<tenant>/v2.0","client_id":"...","client_secret":"..."},"google":{"issuer":"https://accounts.google.com","client_id":"...","client_secret":"..."}}
-  OIDC_REDIRECT_BASE=https://tu-dominio
-  OIDC_ALLOWED_DOMAINS=empresa.com
-  ```
-  App registration MS365: redirect URI `<OIDC_REDIRECT_BASE>/api/v1/auth/oidc/callback`.
-  El primer usuario SSO queda admin si no hay usuarios; el resto viewer.
-
-## Features P1 (nivel mercado)
-
-- **ALPR (patentes)**: `roi.alpr.enabled: true` en el ROI de la cámara + opcional
-  `watchlist: [ABC123]` → evento `ALPR` / `ALPR_WATCHLIST` (crítico). OCR local
-  (tesseract, en las imágenes) o VLM (`backend: vlm`).
-- **Búsqueda semántica (CLIP)**: página *Búsqueda* — "camión rojo", "persona
-  caída"… Embeddings CLIP ViT-B/32 ONNX CPU generados al ingerir snapshots
-  (pgvector). Regenerar modelos: `python api/tools/export_clip.py`.
-- **Mapa GIS**: página *Mapa* (react-leaflet + OSM) con estado por cámara;
-  `latitude/longitude` editables en Cámaras.
-- **Push PWA**: campana en el panel de alertas → notificaciones push nativas
-  para warning/critical (service worker + Web Push VAPID).
-- **OTA de modelos**: selects *Backend / Modelo* por cámara en Cámaras
-  (rollout sin tocar YAML; reconcile lo levanta en caliente).
-- **Sinopsis**: botón *Resumen* en Eventos → contact sheet JPEG de snapshots
-  (ventana configurable), `GET /api/v1/reports/synopsis.jpg`.
+La generación de snapshots/clips desde el plano DeepStream y el entrenamiento
+automatizado son trabajos posteriores; no se anuncian como capacidades activas.
 
 ## CI/CD
 
-`.github/workflows/ci.yml`: pytest+ruff+mypy (inference, api), vitest+build
-(web), helm lint, y build/push de imágenes a GHCR (`ghcr.io/<owner>/sauron-*`)
-en push a main/tags. Imágenes api/web multi-arch (amd64+arm64); inference amd64.
+`.github/workflows/ci.yml` ejecuta:
 
-## White-label
-
-Sin rebuild: montar logos en `./brand` (compose) y definir env
-`SAURON_BRANDING_*` (app name, colores). El frontend consume
-`GET /api/v1/branding` antes del primer render.
+- Ruff, mypy y pytest para `deepstream/` y `api/`.
+- Vitest y build de producción para `web/`.
+- `helm lint` y render del chart.
+- Build y publicación en GHCR de `sauron-deepstream`, `sauron-api` y
+  `sauron-web` después de un push válido a `main` o a un tag.
 
 ## Desarrollo
 
 ```bash
-cd inference && uv venv && uv pip install -e ".[dev]" && pytest
+cd deepstream && uv venv && uv pip install -e ".[dev]" && pytest
 cd api && uv venv && uv pip install -e ".[dev]" && pytest
-cd web && npm install && npm run dev      # proxy a :8000
+cd web && npm ci && npm run test && npm run build
 ```
+
+Las pruebas unitarias del plano DeepStream no requieren GPU. La ejecución real
+y la compilación de engines requieren Linux, driver NVIDIA y NVIDIA Container
+Toolkit.

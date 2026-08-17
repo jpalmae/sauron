@@ -3,7 +3,7 @@ from sauron_deepstream.registry import Camera, CameraRegistry, camera_from_api
 
 def test_registry_binds_dynamic_source_to_camera():
     registry = CameraRegistry()
-    camera = Camera("cam-1", "Acceso", "rtsp://camera", None)
+    camera = Camera("cam-1", "Acceso", "rtsp://camera", "traffic", None)
     registry.set_camera(camera)
     registry.bind_source(7, "cam-1")
 
@@ -29,5 +29,6 @@ def test_camera_from_api_validates_roi():
         "rtsp://resolved",
     )
     assert camera.uri == "rtsp://resolved"
+    assert camera.analytics_profile == "traffic"
     assert camera.roi is not None
     assert camera.roi.lines[0].id == "count"

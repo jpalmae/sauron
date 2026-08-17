@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import math
 from collections import deque
+from collections.abc import Callable
 from typing import Protocol
 
 import numpy as np
@@ -305,6 +306,61 @@ class _Congestion:
         ]
 
 
+class _Occupancy:
+    """Periodic people occupancy derived from TrafficCamNet + NvDCF tracks."""
+
+    def __init__(self, config: PolygonConfig) -> None:
+        self.config = config
+        self.polygon = np.asarray(config.points, dtype=np.float64)
+        self._first_seen: dict[int, float] = {}
+        self._seen: set[int] = set()
+        self._peak = 0
+        self._last_emit = float("-inf")
+
+    def process(self, frame, tracks, thresholds, fps) -> list[Event]:
+        people = [
+            track
+            for track in tracks
+            if track.class_name.lower() in {"person", "persons"}
+            and _inside(track.centroid, self.polygon)
+        ]
+        active = {track.object_id for track in people}
+        for object_id in set(self._first_seen) - active:
+            self._first_seen.pop(object_id, None)
+        for track in people:
+            self._first_seen.setdefault(track.object_id, frame.timestamp)
+            self._seen.add(track.object_id)
+
+        count = len(people)
+        self._peak = max(self._peak, count)
+        if frame.timestamp - self._last_emit < thresholds.occupancy_interval_s:
+            return []
+        self._last_emit = frame.timestamp
+        avg_dwell = (
+            sum(frame.timestamp - self._first_seen[track.object_id] for track in people) / count
+            if count
+            else 0.0
+        )
+        return [
+            Event(
+                EventType.OCCUPANCY,
+                frame.camera_id,
+                frame.timestamp,
+                1.0,
+                Priority.INFO,
+                f"occupancy:{self.config.id}",
+                metadata={
+                    "polygon_id": self.config.id,
+                    "count": count,
+                    "by_class": {"person": count},
+                    "unique_total": len(self._seen),
+                    "avg_dwell_s": round(avg_dwell, 1),
+                    "peak": self._peak,
+                },
+            )
+        ]
+
+
 class RulesEngine:
     """Zero-copy traffic analytics over NvDCF tracks."""
 
@@ -314,7 +370,12 @@ class RulesEngine:
         self.thresholds = roi.thresholds
         self.speed = SpeedEstimator(roi.homography) if roi.homography else None
         self.rules: list[_Rule] = [_LineCrossing(config) for config in roi.lines]
-        factories = {"stopped": _Stopped, "wrong_way": _WrongWay, "congestion": _Congestion}
+        factories: dict[str, Callable[[PolygonConfig], _Rule]] = {
+            "stopped": _Stopped,
+            "wrong_way": _WrongWay,
+            "congestion": _Congestion,
+            "occupancy": _Occupancy,
+        }
         for polygon in roi.polygons:
             for name in polygon.rules:
                 factory = factories.get(name)

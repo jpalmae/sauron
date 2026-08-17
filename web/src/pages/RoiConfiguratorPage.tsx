@@ -133,7 +133,12 @@ export default function RoiConfiguratorPage() {
     if (draft.length >= 3) {
       setPolygons((ps) => [
         ...ps,
-        { id: `lane-${ps.length + 1}`, points: draft, kind: "lane", rules: ["stopped"] },
+        {
+          id: `lane-${ps.length + 1}`,
+          points: draft,
+          kind: camera?.analytics_profile === "people" ? "counting" : "lane",
+          rules: [camera?.analytics_profile === "people" ? "occupancy" : "stopped"],
+        },
       ]);
       setSelected({ type: "polygon", idx: polygons.length });
     }
@@ -162,7 +167,7 @@ export default function RoiConfiguratorPage() {
     { key: "delete", label: "Borrar", icon: Trash2, hint: "click sobre la figura" },
   ];
 
-  const cameraDomain = camera ? (camera.detector?.includes("pose") ? "people" as const : "traffic" as const) : null;
+  const cameraDomain = camera?.analytics_profile ?? null;
 
   return (
     <div className="flex h-full">
@@ -176,7 +181,7 @@ export default function RoiConfiguratorPage() {
               value={cameraDomain ?? "traffic"}
               onChange={async (e) => {
                 const nd = e.target.value as "traffic" | "people";
-                const patch = nd === "people" ? { detector: "pose_objects" as const } : { detector: "tensorrt" as const, model: "yolov8s" as const };
+                const patch = { analytics_profile: nd };
                 await api.updateCamera(camera.id, patch);
                 setCamera({ ...camera, ...patch } as Camera);
               }}

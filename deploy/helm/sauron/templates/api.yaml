@@ -17,8 +17,11 @@ spec:
           ports:
             - containerPort: 8000
           env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: {{ .Values.secrets.name }}, key: postgres-password }
             - name: SAURON_DATABASE_URL
-              value: {{ .Values.database.url | quote }}
+              value: {{ printf "postgresql+asyncpg://%s:$(POSTGRES_PASSWORD)@%s:%v/%s" .Values.database.user .Values.database.host .Values.database.port .Values.database.name | quote }}
             - name: SAURON_REDIS_URL
               value: {{ .Values.redis.url | quote }}
             - name: SAURON_S3_ENDPOINT
@@ -26,7 +29,8 @@ spec:
             - name: SAURON_S3_ACCESS_KEY
               value: {{ .Values.s3.accessKey | quote }}
             - name: SAURON_S3_SECRET_KEY
-              value: {{ .Values.s3.secretKey | quote }}
+              valueFrom:
+                secretKeyRef: { name: {{ .Values.secrets.name }}, key: s3-secret-key }
             - name: SAURON_S3_BUCKET
               value: {{ .Values.s3.bucket | quote }}
             - name: SAURON_BRANDING_APP_NAME
@@ -35,6 +39,19 @@ spec:
               value: {{ .Values.branding.companyName | quote }}
             - name: SAURON_BRANDING_PRIMARY_COLOR
               value: {{ .Values.branding.primaryColor | quote }}
+            - name: SAURON_AUTH_ENABLED
+              value: {{ .Values.auth.enabled | quote }}
+            - name: SAURON_ADMIN_EMAIL
+              value: {{ .Values.auth.adminEmail | quote }}
+            - name: SAURON_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: {{ .Values.secrets.name }}, key: admin-password }
+            - name: SAURON_SECRET_KEY
+              valueFrom:
+                secretKeyRef: { name: {{ .Values.secrets.name }}, key: jwt-secret }
+            - name: SAURON_INGEST_TOKEN
+              valueFrom:
+                secretKeyRef: { name: {{ .Values.secrets.name }}, key: ingest-token }
           readinessProbe:
             httpGet: { path: /healthz, port: 8000 }
           livenessProbe:

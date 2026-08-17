@@ -26,6 +26,8 @@ def test_renders_batch_specific_pgie_config(tmp_path: Path):
         ingest_token="token",
         redis_url="redis://redis",
         max_streams=20,
+        shard_index=0,
+        shard_count=1,
         secondary_batch_size=64,
         target_fps=10,
         inference_interval=0,

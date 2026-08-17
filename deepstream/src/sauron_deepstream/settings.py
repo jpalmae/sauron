@@ -19,12 +19,23 @@ def _positive_float(name: str, default: float) -> float:
     return value
 
 
+def _shard_index() -> int:
+    explicit = os.environ.get("SAURON_DS_SHARD_INDEX")
+    if explicit is not None:
+        return max(0, int(explicit))
+    pod_name = os.environ.get("SAURON_DS_POD_NAME", "")
+    ordinal = pod_name.rsplit("-", 1)[-1]
+    return int(ordinal) if ordinal.isdigit() else 0
+
+
 @dataclass(frozen=True, slots=True)
 class Settings:
     api_url: str
     ingest_token: str
     redis_url: str
     max_streams: int
+    shard_index: int
+    shard_count: int
     secondary_batch_size: int
     target_fps: int
     inference_interval: int
@@ -57,6 +68,8 @@ class Settings:
             ingest_token=os.environ.get("SAURON_INGEST_TOKEN", ""),
             redis_url=os.environ.get("SAURON_REDIS_URL", "redis://redis:6379/0"),
             max_streams=_positive_int("SAURON_DS_MAX_STREAMS", 20),
+            shard_index=_shard_index(),
+            shard_count=_positive_int("SAURON_DS_SHARD_COUNT", 1),
             secondary_batch_size=_positive_int("SAURON_DS_SECONDARY_BATCH", 64),
             target_fps=_positive_int("SAURON_DS_TARGET_FPS", 10),
             inference_interval=max(0, int(os.environ.get("SAURON_DS_INFERENCE_INTERVAL", "0"))),
@@ -119,6 +132,8 @@ class Settings:
         )
 
     def validate_files(self) -> None:
+        if self.shard_index >= self.shard_count:
+            raise ValueError("SAURON_DS_SHARD_INDEX must be lower than SAURON_DS_SHARD_COUNT")
         for path in (
             self.primary_model_path,
             self.primary_labels_path,

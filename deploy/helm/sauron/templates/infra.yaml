@@ -18,7 +18,8 @@ spec:
             - name: POSTGRES_USER
               value: sauron
             - name: POSTGRES_PASSWORD
-              value: changeme
+              valueFrom:
+                secretKeyRef: { name: {{ .Values.secrets.name }}, key: postgres-password }
             - name: POSTGRES_DB
               value: sauron
           ports:
@@ -105,7 +106,8 @@ spec:
             - name: MINIO_ROOT_USER
               value: {{ .Values.s3.accessKey | quote }}
             - name: MINIO_ROOT_PASSWORD
-              value: {{ .Values.s3.secretKey | quote }}
+              valueFrom:
+                secretKeyRef: { name: {{ .Values.secrets.name }}, key: s3-secret-key }
           ports:
             - containerPort: 9000
           volumeMounts:

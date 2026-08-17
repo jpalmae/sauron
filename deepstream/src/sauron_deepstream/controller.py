@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import logging
 import threading
 import time
@@ -15,6 +16,11 @@ from .sources import resolve_source
 log = logging.getLogger(__name__)
 
 
+def camera_shard(stream_id: str, shard_count: int) -> int:
+    digest = hashlib.sha256(stream_id.encode()).digest()
+    return int.from_bytes(digest[:8], "big") % shard_count
+
+
 class SourceController:
     """Reconcile API cameras with nvmultiurisrcbin's built-in REST API."""
 
@@ -25,6 +31,8 @@ class SourceController:
         rest_port: int,
         poll_seconds: float,
         max_streams: int,
+        shard_index: int,
+        shard_count: int,
         registry: CameraRegistry,
         metrics: Metrics,
         stale_seconds: float,
@@ -37,6 +45,8 @@ class SourceController:
         self._rest_url = f"http://127.0.0.1:{rest_port}"
         self._poll_seconds = poll_seconds
         self._max_streams = max_streams
+        self._shard_index = shard_index
+        self._shard_count = shard_count
         self._registry = registry
         self._metrics = metrics
         self._stale_seconds = stale_seconds
@@ -74,6 +84,8 @@ class SourceController:
         desired: dict[str, Camera] = {}
         for payload in payloads:
             stream_id = str(payload.get("stream_id") or "")
+            if stream_id and camera_shard(stream_id, self._shard_count) != self._shard_index:
+                continue
             raw_uri = str(payload.get("rtsp_url") or "").strip()
             if not stream_id or not raw_uri:
                 continue
