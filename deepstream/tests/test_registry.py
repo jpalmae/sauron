@@ -7,7 +7,11 @@ def test_registry_binds_dynamic_source_to_camera():
     registry.set_camera(camera)
     registry.bind_source(7, "cam-1")
 
+    assert registry.is_bound("cam-1") is True
     assert registry.camera_for_source(7) == camera
+    registry.unbind_source(7)
+    assert registry.is_bound("cam-1") is False
+    registry.bind_source(7, "cam-1")
     registry.remove_camera("cam-1")
     assert registry.camera_for_source(7) is None
 

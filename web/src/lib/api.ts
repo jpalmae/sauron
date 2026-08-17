@@ -88,11 +88,13 @@ export interface DetectionObj {
   class: string;
   box: [number, number, number, number];
   posture?: string;
+  vehicle_type?: string;
   keypoints?: [number, number][];
 }
 
 export interface DetectionsPayload {
-  ts: number;
+  status: "live" | "stale";
+  ts: number | null;
   width: number;
   height: number;
   objects: DetectionObj[];

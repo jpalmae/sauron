@@ -2,7 +2,7 @@ import Hls from "hls.js";
 import { CameraOff, Maximize2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { api, auth, type Camera } from "../lib/api";
-import DetectionsOverlay from "./DetectionsOverlay";
+import DetectionsOverlay, { type AnalyticsState } from "./DetectionsOverlay";
 
 type TileState = "connecting" | "live" | "offline";
 
@@ -52,7 +52,11 @@ function WhepVideo({ url, onState }: { url: string; onState: (s: TileState) => v
   useEffect(() => {
     const pc = new RTCPeerConnection();
     let cancelled = false;
-    let live = false;
+    let disconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const markLive = () => {
+      if (!cancelled) onState("live");
+    };
 
     async function connect() {
       try {
@@ -66,26 +70,34 @@ function WhepVideo({ url, onState }: { url: string; onState: (s: TileState) => v
         });
         if (!resp.ok) throw new Error(String(resp.status));
         await pc.setRemoteDescription({ type: "answer", sdp: await resp.text() });
-        if (!cancelled) {
-          live = true;
-          onState("live");
-        }
       } catch {
         if (!cancelled) onState("offline");
       }
     }
 
     pc.ontrack = (e) => {
-      if (videoRef.current) videoRef.current.srcObject = e.streams[0];
+      if (videoRef.current) {
+        videoRef.current.srcObject = e.streams[0];
+        videoRef.current.onplaying = markLive;
+      }
     };
     pc.onconnectionstatechange = () => {
-      if (live && (pc.connectionState === "failed" || pc.connectionState === "disconnected")) {
+      if (pc.connectionState === "connected") {
+        if (disconnectTimer) clearTimeout(disconnectTimer);
+        markLive();
+      } else if (pc.connectionState === "failed" || pc.connectionState === "closed") {
         onState("offline");
+      } else if (pc.connectionState === "disconnected") {
+        if (disconnectTimer) clearTimeout(disconnectTimer);
+        disconnectTimer = setTimeout(() => {
+          if (!cancelled && pc.connectionState === "disconnected") onState("offline");
+        }, 3000);
       }
     };
     void connect();
     return () => {
       cancelled = true;
+      if (disconnectTimer) clearTimeout(disconnectTimer);
       pc.close();
     };
   }, [url, onState]);
@@ -96,6 +108,7 @@ function WhepVideo({ url, onState }: { url: string; onState: (s: TileState) => v
 function LiveTile({ camera }: { camera: Camera }) {
   const [source, setSource] = useState<{ kind: string; url: string } | null>(null);
   const [state, setState] = useState<TileState>("connecting");
+  const [analyticsState, setAnalyticsState] = useState<AnalyticsState>("connecting");
 
   useEffect(() => {
     let alive = true;
@@ -114,7 +127,7 @@ function LiveTile({ camera }: { camera: Camera }) {
 
   return (
     <div className="group relative overflow-hidden rounded-lg border border-line bg-panel">
-        <DetectionsOverlay cameraId={camera.id} />
+      <DetectionsOverlay cameraId={camera.id} onState={setAnalyticsState} />
       {source?.kind === "hls" && <HlsVideo url={source.url} onState={setState} />}
       {source?.kind === "whep" && <WhepVideo url={source.url} onState={setState} />}
       {(!source || state !== "live") && (
@@ -138,6 +151,24 @@ function LiveTile({ camera }: { camera: Camera }) {
         <span className="font-mono text-[10px] text-mut opacity-0 transition-opacity group-hover:opacity-100">
           <Maximize2 size={12} className="inline" /> {camera.stream_id}
         </span>
+      </div>
+      <div
+        className={`absolute bottom-2 right-2 z-20 rounded border px-2 py-1 font-mono text-[9px] backdrop-blur-sm ${
+          analyticsState === "live"
+            ? "border-info/40 bg-info/15 text-info"
+            : analyticsState === "connecting"
+              ? "border-line bg-base/70 text-mut"
+              : "border-warn/40 bg-warn/15 text-warn"
+        }`}
+        role="status"
+      >
+        {analyticsState === "live"
+          ? "ANALÍTICA ACTIVA"
+          : analyticsState === "connecting"
+            ? "ANALÍTICA CONECTANDO"
+            : analyticsState === "stale"
+              ? "ANALÍTICA SIN FRAMES"
+              : "ANALÍTICA NO DISPONIBLE"}
       </div>
     </div>
   );

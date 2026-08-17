@@ -43,6 +43,10 @@ class CameraRegistry:
         with self._lock:
             self._source_to_stream.pop(source_id, None)
 
+    def is_bound(self, stream_id: str) -> bool:
+        with self._lock:
+            return stream_id in self._source_to_stream.values()
+
     def camera_for_source(self, source_id: int) -> Camera | None:
         with self._lock:
             stream_id = self._source_to_stream.get(source_id)

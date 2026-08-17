@@ -39,14 +39,26 @@ def test_resolve_youtube_caches(monkeypatch):
     assert len(calls) == 1
 
 
-async def test_live_url_kinds(client):
-    # rtsp -> whep path
+async def test_live_url_kinds(client, monkeypatch):
+    from types import SimpleNamespace
+
+    from sauron_api.routers import streams
+
+    monkeypatch.setattr(
+        streams,
+        "get_settings",
+        lambda: SimpleNamespace(live_go2rtc_enabled=True),
+    )
+    # RTSP through go2rtc -> same-origin WebRTC signaling path
     await client.post(
         "/api/v1/cameras",
         json={"name": "RTSP cam", "stream_id": "rtsp-cam", "rtsp_url": "rtsp://cam/1"},
     )
     resp = await client.get("/api/v1/streams/rtsp-cam/live-url")
-    assert resp.json() == {"kind": "whep", "url": "/whep/rtsp-cam"}
+    assert resp.json() == {
+        "kind": "whep",
+        "url": "/go2rtc/api/webrtc?src=1",
+    }
 
     # plain hls -> same-origin proxy path
     await client.post(

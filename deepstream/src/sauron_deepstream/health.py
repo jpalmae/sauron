@@ -9,20 +9,35 @@ from .metrics import Metrics
 
 
 class HealthServer:
-    def __init__(self, port: int, metrics: Metrics) -> None:
+    def __init__(
+        self,
+        port: int,
+        metrics: Metrics,
+        stale_seconds: float,
+        max_recovery_attempts: int,
+    ) -> None:
         self._port = port
         self._metrics = metrics
+        self._stale_seconds = stale_seconds
+        self._max_recovery_attempts = max_recovery_attempts
         self._server: ThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
 
     def start(self) -> None:
         metrics = self._metrics
+        stale_seconds = self._stale_seconds
+        max_recovery_attempts = self._max_recovery_attempts
 
         class Handler(BaseHTTPRequestHandler):
             def do_GET(self) -> None:
                 if self.path == "/healthz":
-                    status = HTTPStatus.OK if metrics.ready else HTTPStatus.SERVICE_UNAVAILABLE
-                    body = json.dumps({"status": "ok" if metrics.ready else "starting"}).encode()
+                    snapshot = metrics.health_snapshot(stale_seconds, max_recovery_attempts)
+                    status = (
+                        HTTPStatus.OK
+                        if snapshot["healthy"]
+                        else HTTPStatus.SERVICE_UNAVAILABLE
+                    )
+                    body = json.dumps(snapshot, separators=(",", ":")).encode()
                     self.send_response(status)
                     self.send_header("Content-Type", "application/json")
                 elif self.path == "/metrics":

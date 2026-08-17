@@ -26,8 +26,9 @@ export default function Dashboard() {
     api.events({}, 1, 20).then((p) => setEvents(p.items)).catch(() => {});
   }, []);
 
-  const trafficCams = filterCamerasByDomain(cameras, "traffic");
-  const peopleCams = filterCamerasByDomain(cameras, "people");
+  const activeCameras = cameras.filter((camera) => camera.is_active);
+  const trafficCams = filterCamerasByDomain(activeCameras, "traffic");
+  const peopleCams = filterCamerasByDomain(activeCameras, "people");
   const trafficEvents = filterEventsByDomain(events, "traffic").slice(0, 3);
   const peopleEvents = filterEventsByDomain(events, "people").slice(0, 3);
 
@@ -100,7 +101,7 @@ export default function Dashboard() {
         <Link to="/map" className="rounded-lg border border-line bg-panel p-4 hover:border-brand/40 flex items-center gap-3">
           <Map size={16} className="text-mut" />
           <span className="text-sm">Mapa</span>
-          <span className="ml-auto text-xs text-dim">{cameras.length} cámaras</span>
+          <span className="ml-auto text-xs text-dim">{activeCameras.length} activas</span>
         </Link>
         <Link to="/search" className="rounded-lg border border-line bg-panel p-4 hover:border-brand/40 flex items-center gap-3">
           <Search size={16} className="text-mut" />
@@ -108,7 +109,7 @@ export default function Dashboard() {
         </Link>
         <div className="rounded-lg border border-line bg-panel p-4">
           <div className="text-sm font-medium">Estado global</div>
-          <div className="mt-2 font-mono text-xs text-mut">{cameras.filter((c) => c.is_active).length} activas / {cameras.length} totales</div>
+          <div className="mt-2 font-mono text-xs text-mut">{activeCameras.length} activas / {cameras.length} totales</div>
         </div>
       </div>
     </div>

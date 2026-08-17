@@ -12,6 +12,13 @@ def _positive_int(name: str, default: int) -> int:
     return value
 
 
+def _positive_float(name: str, default: float) -> float:
+    value = float(os.environ.get(name, default))
+    if value <= 0:
+        raise ValueError(f"{name} must be positive")
+    return value
+
+
 @dataclass(frozen=True, slots=True)
 class Settings:
     api_url: str
@@ -22,6 +29,9 @@ class Settings:
     target_fps: int
     inference_interval: int
     source_poll_seconds: float
+    source_stale_seconds: float
+    source_recovery_cooldown: float
+    source_recovery_attempts: int
     source_rest_port: int
     health_port: int
     mux_width: int
@@ -50,7 +60,10 @@ class Settings:
             secondary_batch_size=_positive_int("SAURON_DS_SECONDARY_BATCH", 64),
             target_fps=_positive_int("SAURON_DS_TARGET_FPS", 10),
             inference_interval=max(0, int(os.environ.get("SAURON_DS_INFERENCE_INTERVAL", "0"))),
-            source_poll_seconds=float(os.environ.get("SAURON_DS_SOURCE_POLL_S", "15")),
+            source_poll_seconds=_positive_float("SAURON_DS_SOURCE_POLL_S", 15),
+            source_stale_seconds=_positive_float("SAURON_DS_SOURCE_STALE_S", 45),
+            source_recovery_cooldown=_positive_float("SAURON_DS_RECOVERY_COOLDOWN_S", 45),
+            source_recovery_attempts=_positive_int("SAURON_DS_RECOVERY_ATTEMPTS", 3),
             source_rest_port=_positive_int("SAURON_DS_SOURCE_REST_PORT", 9010),
             health_port=_positive_int("SAURON_DS_HEALTH_PORT", 9100),
             mux_width=_positive_int("SAURON_DS_MUX_WIDTH", 1280),

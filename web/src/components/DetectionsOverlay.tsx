@@ -15,11 +15,21 @@ const POSTURE_COLOR: Record<string, string> = {
   unknown: "#eab308",
 };
 
-export default function DetectionsOverlay({ cameraId }: { cameraId: string }) {
+export type AnalyticsState = "connecting" | "live" | "stale" | "unavailable";
+
+export default function DetectionsOverlay({
+  cameraId,
+  onState,
+}: {
+  cameraId: string;
+  onState?: (state: AnalyticsState) => void;
+}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     let alive = true;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let latest: DetectionsPayload | null = null;
     const draw = (d: DetectionsPayload | null) => {
       const canvas = canvasRef.current;
       if (!canvas) return;
@@ -56,7 +66,8 @@ export default function DetectionsOverlay({ cameraId }: { cameraId: string }) {
           }
         }
         // label
-        const label = `${o.class} #${o.id}${o.posture ? ` · ${o.posture}` : ""}`;
+        const detail = o.vehicle_type ?? o.posture;
+        const label = `${o.class} #${o.id}${detail ? ` · ${detail}` : ""}`;
         ctx.font = "600 11px ui-monospace, monospace";
         const tw = ctx.measureText(label).width + 8;
         ctx.fillStyle = "rgba(0,0,0,0.65)";
@@ -66,21 +77,31 @@ export default function DetectionsOverlay({ cameraId }: { cameraId: string }) {
       }
     };
 
-    const load = () =>
-      api
+    const load = () => {
+      void api
         .detections(cameraId)
-        .then((d) => alive && draw(d))
-        .catch(() => {});
+        .then((d) => {
+          if (!alive) return;
+          latest = d;
+          draw(d);
+          onState?.(d.status);
+        })
+        .catch(() => alive && onState?.("unavailable"))
+        .finally(() => {
+          // Never overlap requests. A fixed interval can exhaust browser and
+          // API connections when one response is delayed or a camera drops.
+          if (alive) timer = setTimeout(load, 300);
+        });
+    };
     load();
-    const t = setInterval(load, 220);
-    const onResize = () => load();
+    const onResize = () => draw(latest);
     window.addEventListener("resize", onResize);
     return () => {
       alive = false;
-      clearInterval(t);
+      if (timer) clearTimeout(timer);
       window.removeEventListener("resize", onResize);
     };
-  }, [cameraId]);
+  }, [cameraId, onState]);
 
   return (
     <canvas

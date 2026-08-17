@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import logging
+import os
+import signal
 import sys
 
 from .analytics import MetadataProcessor, make_metadata_operator
@@ -30,7 +32,18 @@ def run() -> None:
     registry = CameraRegistry()
     bridge = RedisStreamBridge(settings.redis_url, metrics)
     processor = MetadataProcessor(registry, bridge, metrics, labels, settings.target_fps)
-    health = HealthServer(settings.health_port, metrics)
+
+    def restart_process() -> None:
+        # Docker does not restart a merely unhealthy container. Terminating the
+        # stuck native pipeline lets `restart: unless-stopped` rebuild it cleanly.
+        os.kill(os.getpid(), signal.SIGTERM)
+
+    health = HealthServer(
+        settings.health_port,
+        metrics,
+        settings.source_stale_seconds,
+        settings.source_recovery_attempts,
+    )
     controller = SourceController(
         settings.api_url,
         settings.ingest_token,
@@ -38,6 +51,11 @@ def run() -> None:
         settings.source_poll_seconds,
         settings.max_streams,
         registry,
+        metrics,
+        settings.source_stale_seconds,
+        settings.source_recovery_cooldown,
+        settings.source_recovery_attempts,
+        restart_process,
     )
 
     pipeline = Pipeline("sauron-deepstream")

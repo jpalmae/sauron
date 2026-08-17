@@ -176,8 +176,10 @@ async def camera_detections(
         raise HTTPException(404, "camera not found")
     data = await _redis_client().get(f"sauron:detections:{camera.stream_id}")
     if not data:
-        return {"objects": []}
-    return json.loads(data)
+        return {"status": "stale", "ts": None, "width": 0, "height": 0, "objects": []}
+    payload = json.loads(data)
+    payload["status"] = "live"
+    return payload
 
 
 @router.patch("/{camera_id}", response_model=CameraRead)
