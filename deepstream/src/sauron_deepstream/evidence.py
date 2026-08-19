@@ -301,7 +301,7 @@ class EvidenceManager:
         desired_start = request.timestamp - self._settings.evidence_pre_seconds
         trim_offset = max(0.0, desired_start - estimated_first_start)
         duration = self._settings.evidence_pre_seconds + self._settings.evidence_post_seconds
-        command = [
+        input_args = [
             "ffmpeg",
             "-hide_banner",
             "-loglevel",
@@ -318,18 +318,31 @@ class EvidenceManager:
             "-t",
             f"{duration:.3f}",
             "-an",
-            "-c:v",
-            "copy",
-            "-movflags",
-            "+faststart",
-            "-y",
-            str(output),
         ]
-        result = subprocess.run(command, capture_output=True, timeout=60, check=False)
-        if result.returncode != 0 or not output.is_file() or output.stat().st_size == 0:
-            log.warning("segment concatenation failed: %s", result.stderr.decode(errors="replace"))
-            return None
-        return output
+        encoders = [
+            ["-c:v", "h264_nvenc", "-preset", "p4", "-cq", "24", "-b:v", "0"],
+            ["-c:v", "libx264", "-preset", "veryfast", "-crf", "23"],
+        ]
+        for encoder in encoders:
+            command = [
+                *input_args,
+                *encoder,
+                "-pix_fmt",
+                "yuv420p",
+                "-movflags",
+                "+faststart",
+                "-y",
+                str(output),
+            ]
+            result = subprocess.run(command, capture_output=True, timeout=60, check=False)
+            if result.returncode == 0 and output.is_file() and output.stat().st_size > 0:
+                return output
+            log.warning(
+                "clip encoding with %s failed: %s",
+                encoder[1],
+                result.stderr.decode(errors="replace"),
+            )
+        return None
 
     def _extract_snapshot(
         self,

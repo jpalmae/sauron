@@ -3,8 +3,8 @@
 ## Evidencia visual de eventos
 
 Cada réplica DeepStream mantiene segmentos de video codificado sin realizar una segunda
-decodificación GPU. La configuración predeterminada conserva 120 segundos por cámara y,
-ante un evento, genera:
+decodificación continua. La configuración predeterminada conserva 120 segundos por cámara
+y, ante un evento, recorta y normaliza el clip con NVENC (con fallback CPU), y genera:
 
 - snapshot JPEG anotado con tipo de evento, regla, hora, clase, confianza e ID;
 - clip MP4 con 5 segundos previos y 10 segundos posteriores;
