@@ -136,6 +136,16 @@ GET /api/v1/reports/dataset-coco.zip
 La generación de snapshots/clips desde el plano DeepStream y el entrenamiento
 automatizado son trabajos posteriores; no se anuncian como capacidades activas.
 
+## Evaluación y aceptación
+
+El plano DeepStream incluye herramientas reproducibles para validar ROI/homografía,
+capturar imágenes con sus predicciones, importar ground truth COCO y generar reportes de
+precisión, recall, F1, error de conteo y FPS. Los umbrales producen un código de salida apto
+para una puerta de liberación en CI.
+
+Consulte [docs/evaluation.md](docs/evaluation.md) para el procedimiento completo. Una
+captura sin ground truth humano no se considera evidencia de precisión.
+
 ## CI/CD
 
 `.github/workflows/ci.yml` ejecuta:

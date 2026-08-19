@@ -164,12 +164,14 @@ class MetadataProcessor:
                 camera.stream_id,
                 {
                     "ts": timestamp,
+                    "frame_seq": frame_number,
                     "width": width,
                     "height": height,
                     "objects": [
                         {
                             "id": track.object_id,
                             "class": track.class_name,
+                            "confidence": round(track.score, 4),
                             "vehicle_type": self._vehicle_types.get(
                                 (camera.stream_id, track.object_id)
                             ),

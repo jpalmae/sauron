@@ -21,6 +21,9 @@ dev = [
 
 [project.scripts]
 sauron-deepstream = "sauron_deepstream.app:main"
+sauron-calibrate = "sauron_deepstream.calibration:main"
+sauron-eval-capture = "sauron_deepstream.evaluation_capture:main"
+sauron-evaluate = "sauron_deepstream.evaluation:main"
 
 [build-system]
 requires = ["hatchling"]

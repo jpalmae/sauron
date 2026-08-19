@@ -1,0 +1,57 @@
+[
+  {
+    "name": "Demo tráfico vehicular",
+    "stream_id": "caltrans-i5-43rd",
+    "rtsp_url": "rtsp://go2rtc:8554/public-i5-43rd",
+    "analytics_profile": "traffic",
+    "roi_config": {
+      "lines": [
+        {
+          "id": "vehicle-count",
+          "points": [[380, 480], [1240, 480]],
+          "direction": [0, 1],
+          "classes": ["car"]
+        }
+      ],
+      "polygons": [
+        {
+          "id": "roadway",
+          "kind": "lane",
+          "points": [[330, 285], [1210, 285], [1280, 700], [470, 700]],
+          "rules": ["stopped", "congestion"],
+          "direction": [0, 1]
+        }
+      ],
+      "thresholds": {
+        "stopped_seconds": 8,
+        "stopped_speed_epsilon": 3,
+        "congestion_occupancy": 0.35,
+        "congestion_seconds": 10,
+        "congestion_cooldown_s": 60
+      }
+    }
+  },
+  {
+    "name": "Demo ciclovía urbana",
+    "stream_id": "caltrans-us50-howe",
+    "rtsp_url": "rtsp://go2rtc:8554/public-us50-howe",
+    "analytics_profile": "traffic",
+    "roi_config": {
+      "lines": [
+        {
+          "id": "bicycle-count",
+          "points": [[720, 120], [720, 700]],
+          "direction": [1, 0],
+          "classes": ["bicycle"]
+        }
+      ],
+      "polygons": [],
+      "thresholds": {
+        "stopped_seconds": 8,
+        "congestion_occupancy": 0.5,
+        "congestion_seconds": 10,
+        "congestion_cooldown_s": 60
+      }
+    }
+  }
+]
