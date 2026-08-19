@@ -4,6 +4,8 @@ import argparse
 import json
 import os
 import re
+import shutil
+import tempfile
 import time
 from pathlib import Path
 from typing import Any
@@ -46,13 +48,16 @@ def capture(
     samples: int = 30,
     interval_seconds: float = 1.0,
     target_fps: float = 10.0,
+    max_capture_seconds: float | None = None,
 ) -> dict[str, Any]:
     if samples <= 0:
         raise ValueError("samples must be positive")
     if interval_seconds < 0:
         raise ValueError("interval_seconds cannot be negative")
     _ensure_empty_directory(output)
-    images_dir = output / "images"
+    workspace_context = tempfile.TemporaryDirectory(prefix="sauron-eval-")
+    workspace = Path(workspace_context.name)
+    images_dir = workspace / "images"
     images_dir.mkdir()
     headers = {"Authorization": f"Bearer {token}"}
     safe_stream = _safe_name(stream_id)
@@ -64,12 +69,19 @@ def capture(
     with httpx.Client(timeout=15, follow_redirects=True) as client:
         start_health = client.get(health_url).raise_for_status().json()
         started = time.monotonic()
-        deadline = started + max(30.0, samples * max(interval_seconds, 0.1) * 3)
+        budget = max_capture_seconds or max(60.0, samples * (interval_seconds + 15.0))
+        deadline = started + budget
+        last_error = ""
         while len(coco_images) < samples and time.monotonic() < deadline:
-            detections = client.get(
-                f"{api_url.rstrip('/')}/api/v1/cameras/{camera_id}/detections",
-                headers=headers,
-            ).raise_for_status().json()
+            try:
+                detections = client.get(
+                    f"{api_url.rstrip('/')}/api/v1/cameras/{camera_id}/detections",
+                    headers=headers,
+                ).raise_for_status().json()
+            except httpx.HTTPError as error:
+                last_error = str(error)
+                time.sleep(max(interval_seconds, 0.1))
+                continue
             if detections.get("status") != "live" or detections.get("frame_seq") is None:
                 time.sleep(max(interval_seconds, 0.1))
                 continue
@@ -77,11 +89,18 @@ def capture(
             if frame_seq in seen_frames:
                 time.sleep(max(interval_seconds / 4, 0.05))
                 continue
-            snapshot = client.get(
-                f"{go2rtc_url.rstrip('/')}/api/frame.jpeg", params={"src": snapshot_stream}
-            ).raise_for_status()
+            try:
+                snapshot = client.get(
+                    f"{go2rtc_url.rstrip('/')}/api/frame.jpeg", params={"src": snapshot_stream}
+                ).raise_for_status()
+            except httpx.HTTPError as error:
+                last_error = str(error)
+                time.sleep(max(interval_seconds, 0.1))
+                continue
             if not snapshot.content.startswith(b"\xff\xd8"):
-                raise ValueError("go2rtc snapshot endpoint did not return a JPEG image")
+                last_error = "go2rtc snapshot endpoint did not return a JPEG image"
+                time.sleep(max(interval_seconds, 0.1))
+                continue
             frame_id = f"{safe_stream}-{int(detections['frame_seq']):010d}.jpg"
             (images_dir / frame_id).write_bytes(snapshot.content)
             seen_frames.add(frame_seq)
@@ -124,7 +143,11 @@ def capture(
         end_health = client.get(health_url).raise_for_status().json()
 
     if len(coco_images) < samples:
-        raise RuntimeError(f"captured {len(coco_images)} of {samples} requested frames")
+        workspace_context.cleanup()
+        detail = f": {last_error}" if last_error else ""
+        raise RuntimeError(
+            f"captured {len(coco_images)} of {samples} requested frames{detail}"
+        )
     frames_delta = max(
         0,
         _health_frames(end_health, stream_id) - _health_frames(start_health, stream_id),
@@ -138,7 +161,7 @@ def capture(
             "target_fps": target_fps,
         }
     )
-    predictions_path = output / "predictions.jsonl"
+    predictions_path = workspace / "predictions.jsonl"
     predictions_path.write_text(
         "".join(json.dumps(item, separators=(",", ":")) + "\n" for item in prediction_records),
         encoding="utf-8",
@@ -152,7 +175,7 @@ def capture(
         "annotations": [],
         "categories": CATEGORIES,
     }
-    (output / "ground-truth.coco.json").write_text(
+    (workspace / "ground-truth.coco.json").write_text(
         json.dumps(ground_truth, indent=2) + "\n", encoding="utf-8"
     )
     manifest = {
@@ -168,9 +191,12 @@ def capture(
             "Export COCO instances over ground-truth.coco.json and run sauron-evaluate.",
         ],
     }
-    (output / "manifest.json").write_text(
+    (workspace / "manifest.json").write_text(
         json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
     )
+    for item in workspace.iterdir():
+        shutil.move(str(item), output / item.name)
+    workspace_context.cleanup()
     return manifest
 
 
@@ -187,6 +213,9 @@ def main() -> None:
     parser.add_argument("--samples", type=int, default=30)
     parser.add_argument("--interval", type=float, default=1.0)
     parser.add_argument("--target-fps", type=float, default=10.0)
+    parser.add_argument(
+        "--max-seconds", type=float, help="Overall capture deadline; default scales with samples"
+    )
     args = parser.parse_args()
     token = os.environ.get(args.token_env, "")
     if not token:
@@ -203,6 +232,7 @@ def main() -> None:
         samples=args.samples,
         interval_seconds=args.interval,
         target_fps=args.target_fps,
+        max_capture_seconds=args.max_seconds,
     )
     print(json.dumps(manifest, indent=2))
 

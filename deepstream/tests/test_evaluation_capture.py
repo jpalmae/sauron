@@ -90,3 +90,30 @@ def test_capture_refuses_non_empty_output(tmp_path):
         assert "not empty" in str(error)
     else:
         raise AssertionError("expected capture to preserve an existing directory")
+
+
+def test_failed_capture_does_not_publish_partial_pack(tmp_path, monkeypatch):
+    class BadSnapshotClient(_Client):
+        def get(self, url, **kwargs):
+            response = super().get(url, **kwargs)
+            if url.endswith("/api/frame.jpeg"):
+                response.content = b"temporary gateway error"
+            return response
+
+    monkeypatch.setattr(evaluation_capture.httpx, "Client", BadSnapshotClient)
+    output = tmp_path / "pack"
+    try:
+        evaluation_capture.capture(
+            camera_id="uuid",
+            stream_id="cam",
+            output=output,
+            token="secret",
+            samples=1,
+            interval_seconds=0,
+            max_capture_seconds=0.01,
+        )
+    except RuntimeError as error:
+        assert "captured 0 of 1" in str(error)
+    else:
+        raise AssertionError("expected capture timeout")
+    assert list(output.iterdir()) == []

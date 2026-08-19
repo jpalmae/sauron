@@ -53,6 +53,7 @@ cd deepstream
   --samples 30 \
   --interval 1 \
   --target-fps 10 \
+  --max-seconds 600 \
   --output evaluation/caltrans-us50-howe
 unset SAURON_TOKEN
 ```
