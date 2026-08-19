@@ -33,7 +33,12 @@ services:
         reservations:
           devices:
             - driver: nvidia
-              capabilities: [gpu, video]
+              # Request the NVIDIA device through Compose; the driver feature
+              # mounts (compute/video/utility) are selected by the environment
+              # above. Adding `video` here prevents NVML from being mounted on
+              # some NVIDIA Container Toolkit versions, so nvmultiurisrcbin
+              # cannot be created even though CUDA itself is available.
+              capabilities: [gpu]
     volumes:
       - deepstream-engines:/models
     ports:
