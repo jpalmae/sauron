@@ -5,6 +5,13 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
+def _bool(name: str, default: bool) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _positive_int(name: str, default: int) -> int:
     value = int(os.environ.get(name, default))
     if value < 1:
@@ -57,6 +64,14 @@ class Settings:
     sgie_template: Path
     tracker_config: Path
     tracker_library: Path
+    evidence_enabled: bool = True
+    evidence_dir: Path = Path("/var/lib/sauron/evidence")
+    evidence_pre_seconds: float = 5.0
+    evidence_post_seconds: float = 10.0
+    evidence_segment_seconds: float = 2.0
+    evidence_retention_seconds: float = 120.0
+    evidence_workers: int = 2
+    evidence_max_clip_bytes: int = 50 * 1024 * 1024
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -128,6 +143,16 @@ class Settings:
                     "SAURON_DS_TRACKER_LIBRARY",
                     ds_root / "lib/libnvds_nvmultiobjecttracker.so",
                 )
+            ),
+            evidence_enabled=_bool("SAURON_DS_EVIDENCE_ENABLED", True),
+            evidence_dir=Path(os.environ.get("SAURON_DS_EVIDENCE_DIR", "/var/lib/sauron/evidence")),
+            evidence_pre_seconds=_positive_float("SAURON_DS_EVIDENCE_PRE_S", 5),
+            evidence_post_seconds=_positive_float("SAURON_DS_EVIDENCE_POST_S", 10),
+            evidence_segment_seconds=_positive_float("SAURON_DS_EVIDENCE_SEGMENT_S", 2),
+            evidence_retention_seconds=_positive_float("SAURON_DS_EVIDENCE_RETENTION_S", 120),
+            evidence_workers=_positive_int("SAURON_DS_EVIDENCE_WORKERS", 2),
+            evidence_max_clip_bytes=_positive_int(
+                "SAURON_DS_EVIDENCE_MAX_CLIP_BYTES", 50 * 1024 * 1024
             ),
         )
 

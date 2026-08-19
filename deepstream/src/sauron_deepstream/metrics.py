@@ -16,6 +16,7 @@ class Metrics:
         self.objects: Counter[str] = Counter()
         self.events: Counter[str] = Counter()
         self.dropped_metadata: Counter[str] = Counter()
+        self.evidence: Counter[str] = Counter()
         self.last_frame: dict[str, float] = {}
         self.recoveries: Counter[str] = Counter()
         self._active_since: dict[str, float] = {}
@@ -112,9 +113,7 @@ class Metrics:
                     age = now - last_seen
                     state = "live" if age < stale_after else "stale"
                 exhausted = (
-                    attempts >= max_recovery_attempts
-                    and state != "live"
-                    and age >= stale_after
+                    attempts >= max_recovery_attempts and state != "live" and age >= stale_after
                 )
                 if exhausted:
                     state = "failed"
@@ -174,6 +173,10 @@ class Metrics:
         with self._lock:
             self.dropped_metadata[kind] += 1
 
+    def record_evidence(self, status: str) -> None:
+        with self._lock:
+            self.evidence[status] += 1
+
     def prometheus(self) -> str:
         with self._lock:
             lines = [
@@ -206,5 +209,10 @@ class Metrics:
             lines.extend(
                 f'sauron_deepstream_metadata_dropped_total{{kind="{kind}"}} {value}'
                 for kind, value in sorted(self.dropped_metadata.items())
+            )
+            lines.append("# TYPE sauron_deepstream_evidence_total counter")
+            lines.extend(
+                f'sauron_deepstream_evidence_total{{status="{status}"}} {value}'
+                for status, value in sorted(self.evidence.items())
             )
         return "\n".join(lines) + "\n"

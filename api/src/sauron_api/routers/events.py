@@ -1,14 +1,18 @@
 from __future__ import annotations
 
+import asyncio
+import io
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth import get_current_user, require_ingest
+from ..config import get_settings
 from ..db import get_session
 from ..ingest import ingest_event
 from ..models import AnalyticsEvent, User
@@ -16,6 +20,15 @@ from ..schemas import EventIngest, EventPage, EventRead
 from ..storage import get_storage
 
 router = APIRouter(prefix="/events", tags=["events"])
+
+
+async def _read_upload(upload: UploadFile | None, limit: int, label: str) -> bytes | None:
+    if upload is None:
+        return None
+    data = await upload.read(limit + 1)
+    if len(data) > limit:
+        raise HTTPException(413, f"{label} exceeds {limit} bytes")
+    return data or None
 
 
 @router.post("", status_code=202)
@@ -87,6 +100,76 @@ async def list_events(
         )
         items.append(item)
     return EventPage(total=total, page=page, page_size=page_size, items=items)
+
+
+@router.post("/{event_id}/evidence")
+async def attach_evidence(
+    event_id: uuid.UUID,
+    snapshot: UploadFile | None = File(default=None),
+    clip: UploadFile | None = File(default=None),
+    session: AsyncSession = Depends(get_session),
+    _: None = Depends(require_ingest),
+):
+    """Attach asynchronously generated media without delaying the original alert."""
+    if snapshot is None and clip is None:
+        raise HTTPException(422, "snapshot or clip is required")
+    settings = get_settings()
+    snapshot_data = await _read_upload(snapshot, settings.evidence_max_snapshot_bytes, "snapshot")
+    clip_data = await _read_upload(clip, settings.evidence_max_clip_bytes, "clip")
+    if snapshot_data is not None and not snapshot_data.startswith(b"\xff\xd8"):
+        raise HTTPException(415, "snapshot must be a JPEG image")
+    if snapshot_data is not None:
+        try:
+            with Image.open(io.BytesIO(snapshot_data)) as image:
+                image.verify()
+        except (UnidentifiedImageError, OSError):
+            raise HTTPException(415, "snapshot must be a valid JPEG image") from None
+    if clip_data is not None and b"ftyp" not in clip_data[:32]:
+        raise HTTPException(415, "clip must be an MP4 file")
+    result = await session.execute(
+        select(AnalyticsEvent).where(AnalyticsEvent.event_id == event_id).limit(1)
+    )
+    row = result.scalar_one_or_none()
+    if row is None:
+        raise HTTPException(404, "event not found")
+    storage = get_storage()
+    if snapshot_data is not None:
+        snapshot_key = await storage.upload_snapshot(row.camera_id, row.timestamp, snapshot_data)
+        if snapshot_key is None:
+            raise HTTPException(503, "snapshot storage is unavailable")
+        row.snapshot_key = snapshot_key
+        from ..embeddings import get_embeddings
+
+        row.embedding = await asyncio.to_thread(get_embeddings().embed_image, snapshot_data)
+    if clip_data is not None:
+        clip_key = await storage.upload_clip(row.camera_id, row.timestamp, clip_data)
+        if clip_key is None:
+            raise HTTPException(503, "clip storage is unavailable")
+        row.clip_key = clip_key
+    metadata = dict(row.extra or {})
+    metadata["evidence_status"] = "complete" if row.snapshot_key and row.clip_key else "partial"
+    metadata["evidence_updated_at"] = datetime.now(UTC).isoformat()
+    row.extra = metadata
+    await session.commit()
+    snapshot_url = await storage.presigned_url(row.snapshot_key)
+    clip_url = await storage.presigned_url(row.clip_key)
+    from ..ws import manager
+
+    await manager.broadcast(
+        {
+            "kind": "evidence_update",
+            "event_id": str(row.event_id),
+            "snapshot_url": snapshot_url,
+            "clip_url": clip_url,
+            "metadata": metadata,
+        }
+    )
+    return {
+        "event_id": str(row.event_id),
+        "evidence_status": metadata["evidence_status"],
+        "snapshot_url": snapshot_url,
+        "clip_url": clip_url,
+    }
 
 
 @router.post("/{event_id}/ack", response_model=EventRead)

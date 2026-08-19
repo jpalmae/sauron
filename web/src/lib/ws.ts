@@ -2,17 +2,20 @@ import { useEffect, useRef, useState } from "react";
 import { auth } from "./api";
 
 export interface WsAlert {
+  kind?: "event" | "evidence_update";
   event_id: string;
-  event_type: string;
-  priority: "info" | "warning" | "critical";
-  camera_id: string;
-  timestamp: string;
-  confidence: number | null;
-  rule_id: string;
-  object_id: number | null;
+  event_type?: string;
+  priority?: "info" | "warning" | "critical";
+  camera_id?: string;
+  timestamp?: string;
+  confidence?: number | null;
+  rule_id?: string;
+  object_id?: number | null;
   metadata: Record<string, unknown> | null;
-  snapshot_key: string | null;
-  clip_key: string | null;
+  snapshot_key?: string | null;
+  clip_key?: string | null;
+  snapshot_url?: string | null;
+  clip_url?: string | null;
 }
 
 function wsUrl(): string {

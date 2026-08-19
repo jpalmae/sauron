@@ -28,6 +28,12 @@ deepstream:
   sourceStaleSeconds: 45
   recoveryCooldownSeconds: 45
   recoveryAttempts: 3
+  evidence:
+    enabled: true
+    preSeconds: 5
+    postSeconds: 10
+    retentionSeconds: 120
+    volumeSizeLimit: 10Gi
   nodeSelector: {}        # e.g. { hpe.com/gpu: "l4" }
   persistence:
     size: 10Gi

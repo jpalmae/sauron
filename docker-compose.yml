@@ -28,6 +28,11 @@ services:
       SAURON_DS_RECOVERY_ATTEMPTS: "3"
       SAURON_DS_SOURCE_REST_PORT: "9010"
       SAURON_DS_HEALTH_PORT: "9100"
+      SAURON_DS_EVIDENCE_ENABLED: ${EVIDENCE_ENABLED:-true}
+      SAURON_DS_EVIDENCE_DIR: /var/lib/sauron/evidence
+      SAURON_DS_EVIDENCE_PRE_S: ${EVIDENCE_PRE_SECONDS:-5}
+      SAURON_DS_EVIDENCE_POST_S: ${EVIDENCE_POST_SECONDS:-10}
+      SAURON_DS_EVIDENCE_RETENTION_S: ${EVIDENCE_RETENTION_SECONDS:-120}
     deploy:
       resources:
         reservations:
@@ -41,6 +46,7 @@ services:
               capabilities: [gpu]
     volumes:
       - deepstream-engines:/models
+      - deepstream-evidence:/var/lib/sauron/evidence
     ports:
       - "9100:9100" # prometheus metrics + healthz
     healthcheck:
@@ -212,4 +218,5 @@ volumes:
   redis-data:
   minio-data:
   deepstream-engines:
+  deepstream-evidence:
   prometheus-data:

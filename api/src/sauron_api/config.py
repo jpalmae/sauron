@@ -72,6 +72,15 @@ class Settings(BaseSettings):
     # Data retention
     retention_days: int = 90  # TimescaleDB retention policy on analytics_events
     s3_retention_days: int = 90  # MinIO lifecycle on snapshots/clips (0 = disabled)
+    evidence_max_snapshot_bytes: int = 5 * 1024 * 1024
+    evidence_max_clip_bytes: int = 50 * 1024 * 1024
+    camera_probe_timeout_seconds: float = 20.0
+    camera_preview_width: int = 960
+    onvif_discovery_seconds: float = 3.0
+    notification_evidence_grace_seconds: int = 20
+    notification_worker_seconds: float = 2.0
+    notification_retry_base_seconds: int = 10
+    report_worker_seconds: float = 30.0
 
 
 _settings: Settings | None = None

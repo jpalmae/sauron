@@ -35,6 +35,22 @@ export default function LivePage({
 
   const onAlert = useCallback(
     (a: WsAlert) => {
+      if (a.kind === "evidence_update") {
+        setAlerts((previous) =>
+          previous.map((alert) =>
+            alert.event_id === a.event_id
+              ? {
+                  ...alert,
+                  snapshot_url: a.snapshot_url ?? alert.snapshot_url,
+                  clip_url: a.clip_url ?? alert.clip_url,
+                  metadata: a.metadata ?? alert.metadata,
+                }
+              : alert,
+          ),
+        );
+        return;
+      }
+      if (!a.event_type || !a.priority || !a.camera_id || !a.timestamp) return;
       if (domain) {
         const isRelevant = domain === "traffic" ? isTrafficEvent(a as any) : isPeopleEvent(a as any);
         if (!isRelevant) return;
@@ -44,8 +60,8 @@ export default function LivePage({
           {
             ...a,
             timestamp: a.timestamp,
-            snapshot_url: null,
-            clip_url: null,
+            snapshot_url: a.snapshot_url ?? null,
+            clip_url: a.clip_url ?? null,
             acknowledged_at: null,
             acknowledged_by: null,
             live: true,

@@ -20,6 +20,7 @@ dependencies = [
     "pgvector>=0.3",
     "onnxruntime>=1.19",
     "pillow>=10.0",
+    "python-multipart>=0.0.9",
     "tokenizers>=0.20",
     "pywebpush>=2.0",
     "aiosmtplib>=3.0",

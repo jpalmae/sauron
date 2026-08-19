@@ -1,19 +1,20 @@
 from __future__ import annotations
 
 import uuid
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth import get_current_user, require_admin
 from ..db import get_session
-from ..models import NotificationChannel, User
+from ..models import NotificationChannel, NotificationDelivery, ReportSchedule, User
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 
-_SECRET_KEYS = {"bot_token", "password"}
+_SECRET_KEYS = {"bot_token", "headers", "password", "url"}
 
 
 class ChannelCreate(BaseModel):
@@ -23,6 +24,8 @@ class ChannelCreate(BaseModel):
     min_priority: str = "critical"
     camera_id: uuid.UUID | None = None
     enabled: bool = True
+    cooldown_seconds: int = Field(default=60, ge=0, le=86400)
+    max_attempts: int = Field(default=5, ge=1, le=20)
 
 
 class ChannelUpdate(BaseModel):
@@ -31,6 +34,8 @@ class ChannelUpdate(BaseModel):
     min_priority: str | None = None
     camera_id: uuid.UUID | None = None
     enabled: bool | None = None
+    cooldown_seconds: int | None = Field(default=None, ge=0, le=86400)
+    max_attempts: int | None = Field(default=None, ge=1, le=20)
 
 
 def _read(ch: NotificationChannel) -> dict:
@@ -43,7 +48,33 @@ def _read(ch: NotificationChannel) -> dict:
         "min_priority": ch.min_priority,
         "camera_id": str(ch.camera_id) if ch.camera_id else None,
         "enabled": ch.enabled,
+        "cooldown_seconds": ch.cooldown_seconds,
+        "max_attempts": ch.max_attempts,
     }
+
+
+def _validate_config(channel_type: str, config: dict) -> None:
+    if channel_type == "webhook":
+        parsed = urlparse(str(config.get("url", "")))
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise HTTPException(422, "webhook config requires a valid http(s) URL")
+    elif channel_type == "telegram":
+        if not config.get("bot_token") or not config.get("chat_id"):
+            raise HTTPException(422, "telegram config requires bot_token and chat_id")
+    elif channel_type == "email":
+        required = ("smtp_host", "to_addrs")
+        if any(not config.get(key) for key in required) or not (
+            config.get("username") or config.get("from_addr")
+        ):
+            raise HTTPException(
+                422, "email config requires smtp_host, to_addrs and username or from_addr"
+            )
+        try:
+            port = int(config.get("smtp_port", 587))
+        except (TypeError, ValueError):
+            raise HTTPException(422, "smtp_port must be an integer") from None
+        if not 1 <= port <= 65535:
+            raise HTTPException(422, "smtp_port must be between 1 and 65535")
 
 
 @router.get("")
@@ -60,6 +91,7 @@ async def create_channel(
     session: AsyncSession = Depends(get_session),
     _: User = Depends(require_admin),
 ):
+    _validate_config(payload.type, payload.config)
     ch = NotificationChannel(**payload.model_dump())
     session.add(ch)
     await session.commit()
@@ -85,6 +117,7 @@ async def update_channel(
                 if k in _SECRET_KEYS and v == "***":
                     continue
                 merged[k] = v
+            _validate_config(ch.type, merged)
             ch.config = merged
         else:
             setattr(ch, field, value)
@@ -102,6 +135,10 @@ async def delete_channel(
     ch = await session.get(NotificationChannel, channel_id)
     if ch is None:
         raise HTTPException(404, "channel not found")
+    await session.execute(
+        delete(NotificationDelivery).where(NotificationDelivery.channel_id == channel_id)
+    )
+    await session.execute(delete(ReportSchedule).where(ReportSchedule.channel_id == channel_id))
     await session.delete(ch)
     await session.commit()
 
@@ -112,7 +149,7 @@ async def test_channel(
     session: AsyncSession = Depends(get_session),
     _: User = Depends(require_admin),
 ):
-    from ..notifier import _send_email, _send_telegram, _send_webhook
+    from ..notifier import _send_email, _send_telegram, _send_webhook, safe_provider_error
 
     ch = await session.get(NotificationChannel, channel_id)
     if ch is None:
@@ -134,6 +171,6 @@ async def test_channel(
             await _send_telegram(ch.config, payload, None)
         elif ch.type == "email":
             await _send_email(ch.config, payload)
-    except Exception as e:  # noqa: BLE001 - surface the provider error to the caller
-        raise HTTPException(502, f"test notification failed: {e}") from None
+    except Exception as e:  # noqa: BLE001 - surface a sanitized provider error to the caller
+        raise HTTPException(502, f"test notification failed: {safe_provider_error(e, ch.config)}") from None
     return {"status": "sent"}

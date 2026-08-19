@@ -26,16 +26,19 @@ async def test_camera_crud(client):
     assert got.status_code == 200
     assert got.json()["name"] == "Entrada Norte"
 
+    updated_stream = f"cam-{uuid.uuid4().hex[:8]}"
     patched = await client.patch(
-        f"/api/v1/cameras/{cam['id']}", json={"is_active": False, "name": "Salida"}
+        f"/api/v1/cameras/{cam['id']}",
+        json={"is_active": False, "name": "Salida", "stream_id": updated_stream},
     )
     assert patched.status_code == 200
     assert patched.json()["is_active"] is False
     assert patched.json()["name"] == "Salida"
+    assert patched.json()["stream_id"] == updated_stream
 
     listed = await client.get("/api/v1/cameras")
     assert listed.status_code == 200
-    assert any(c["stream_id"] == stream for c in listed.json())
+    assert any(c["stream_id"] == updated_stream for c in listed.json())
 
     deleted = await client.delete(f"/api/v1/cameras/{cam['id']}")
     assert deleted.status_code == 204

@@ -19,10 +19,12 @@ async def _process_payload(payload: EventIngest) -> None:
 
     async with get_session_factory()() as session:
         row = await ingest_event(session, get_storage(), payload)
+        storage = get_storage()
         metrics.events_ingested += 1
         metrics.ws_broadcasts += 1
         await manager.broadcast(
             {
+                "kind": "event",
                 "event_id": str(row.event_id),
                 "event_type": row.event_type,
                 "priority": row.priority,
@@ -34,6 +36,8 @@ async def _process_payload(payload: EventIngest) -> None:
                 "metadata": row.extra,
                 "snapshot_key": row.snapshot_key,
                 "clip_key": row.clip_key,
+                "snapshot_url": await storage.presigned_url(row.snapshot_key),
+                "clip_url": await storage.presigned_url(row.clip_key),
             }
         )
         if row.priority in ("critical", "warning"):
@@ -55,6 +59,7 @@ async def _process_payload(payload: EventIngest) -> None:
             if travel is not None:
                 await manager.broadcast(
                     {
+                        "kind": "event",
                         "event_id": str(travel.event_id),
                         "event_type": travel.event_type,
                         "priority": travel.priority,

@@ -63,9 +63,21 @@ spec:
               value: {{ .Values.deepstream.sourceRestPort | quote }}
             - name: SAURON_DS_HEALTH_PORT
               value: {{ .Values.deepstream.metricsPort | quote }}
+            - name: SAURON_DS_EVIDENCE_ENABLED
+              value: {{ .Values.deepstream.evidence.enabled | quote }}
+            - name: SAURON_DS_EVIDENCE_DIR
+              value: /var/lib/sauron/evidence
+            - name: SAURON_DS_EVIDENCE_PRE_S
+              value: {{ .Values.deepstream.evidence.preSeconds | quote }}
+            - name: SAURON_DS_EVIDENCE_POST_S
+              value: {{ .Values.deepstream.evidence.postSeconds | quote }}
+            - name: SAURON_DS_EVIDENCE_RETENTION_S
+              value: {{ .Values.deepstream.evidence.retentionSeconds | quote }}
           volumeMounts:
             - name: engines
               mountPath: /models
+            - name: evidence
+              mountPath: /var/lib/sauron/evidence
           startupProbe:
             httpGet: { path: /healthz, port: metrics }
             periodSeconds: 15
@@ -80,6 +92,10 @@ spec:
             limits:
 {{ toYaml .Values.deepstream.resources.limits | indent 14 }}
               nvidia.com/gpu: 1
+      volumes:
+        - name: evidence
+          emptyDir:
+            sizeLimit: {{ .Values.deepstream.evidence.volumeSizeLimit }}
   volumeClaimTemplates:
     - metadata:
         name: engines

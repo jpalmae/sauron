@@ -8,6 +8,7 @@ dependencies = [
     "numpy>=1.26,<2",
     "prometheus-client>=0.20,<1",
     "pydantic>=2.6,<3",
+    "pillow>=10,<13",
     "PyYAML>=6,<7",
     "redis>=5,<7",
 ]

@@ -1,23 +1,38 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import uuid
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import delete, select
+from pydantic import BaseModel, Field
+from sqlalchemy import delete, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth import get_current_user, require_admin, require_ingest
+from ..camera_probe import discover_onvif, probe_camera
 from ..config import get_settings
 from ..db import get_session
-from ..models import AnalyticsEvent, Camera, HourlyKpi, User
+from ..models import (
+    AnalyticsEvent,
+    Camera,
+    Corridor,
+    HourlyKpi,
+    NotificationChannel,
+    ReportSchedule,
+    User,
+)
 from ..schemas import CameraCreate, CameraRead, CameraUpdate
 
 router = APIRouter(prefix="/cameras", tags=["cameras"])
 
 _aioredis = None
+
+
+class CameraProbeRequest(BaseModel):
+    url: str = Field(min_length=1, max_length=4096)
 
 
 def _redis_client():
@@ -53,6 +68,31 @@ async def create_camera(
     return camera
 
 
+@router.post("/probe")
+async def probe_camera_url(
+    payload: CameraProbeRequest,
+    _: User = Depends(require_admin),
+):
+    """Validate a draft URL and return stream metadata plus a preview frame."""
+    settings = get_settings()
+    try:
+        result = await asyncio.to_thread(
+            probe_camera,
+            payload.url,
+            settings.camera_probe_timeout_seconds,
+            settings.camera_preview_width,
+        )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from None
+    return result.as_dict()
+
+
+@router.get("/discover/onvif")
+async def discover_onvif_cameras(_: User = Depends(require_admin)):
+    """Discover ONVIF NetworkVideoTransmitters visible from the API network."""
+    return await asyncio.to_thread(discover_onvif, get_settings().onvif_discovery_seconds)
+
+
 @router.get("/active", response_model=list[CameraRead])
 async def list_active_cameras(
     session: AsyncSession = Depends(get_session),
@@ -75,6 +115,35 @@ async def get_camera(
     if camera is None:
         raise HTTPException(404, "camera not found")
     return camera
+
+
+@router.post("/{camera_id}/probe")
+async def probe_saved_camera(
+    camera_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+    _: User = Depends(require_admin),
+):
+    """Probe and persist the installation health of an existing camera."""
+    camera = await session.get(Camera, camera_id)
+    if camera is None:
+        raise HTTPException(404, "camera not found")
+    settings = get_settings()
+    try:
+        result = await asyncio.to_thread(
+            probe_camera,
+            camera.rtsp_url,
+            settings.camera_probe_timeout_seconds,
+            settings.camera_preview_width,
+        )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from None
+    details = result.as_dict()
+    details.pop("preview_jpeg", None)
+    camera.probe_status = result.status
+    camera.last_probe_at = datetime.now(UTC)
+    camera.probe_details = details
+    await session.commit()
+    return result.as_dict()
 
 
 @router.get("/{camera_id}/occupancy")
@@ -192,7 +261,18 @@ async def update_camera(
     camera = await session.get(Camera, camera_id)
     if camera is None:
         raise HTTPException(404, "camera not found")
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    changes = payload.model_dump(exclude_unset=True)
+    if "stream_id" in changes and changes["stream_id"] != camera.stream_id:
+        duplicate = await session.execute(
+            select(Camera).where(Camera.stream_id == changes["stream_id"])
+        )
+        if duplicate.scalar_one_or_none() is not None:
+            raise HTTPException(409, f"stream_id '{changes['stream_id']}' already exists")
+    if "rtsp_url" in changes and changes["rtsp_url"] != camera.rtsp_url:
+        camera.probe_status = "untested"
+        camera.last_probe_at = None
+        camera.probe_details = None
+    for field, value in changes.items():
         setattr(camera, field, value)
     await session.commit()
     await session.refresh(camera)
@@ -213,6 +293,17 @@ async def delete_camera(
     # delete raises a ForeignKeyViolationError.
     await session.execute(delete(AnalyticsEvent).where(AnalyticsEvent.camera_id == camera_id))
     await session.execute(delete(HourlyKpi).where(HourlyKpi.camera_id == camera_id))
+    await session.execute(delete(ReportSchedule).where(ReportSchedule.camera_id == camera_id))
+    await session.execute(
+        update(NotificationChannel)
+        .where(NotificationChannel.camera_id == camera_id)
+        .values(camera_id=None)
+    )
+    await session.execute(
+        delete(Corridor).where(
+            or_(Corridor.from_camera_id == camera_id, Corridor.to_camera_id == camera_id)
+        )
+    )
     try:
         await session.delete(camera)
         await session.commit()

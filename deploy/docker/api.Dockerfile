@@ -7,7 +7,10 @@ FROM python:3.11-slim AS base
 ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 
-RUN pip install --no-cache-dir uv
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ffmpeg \
+    && rm -rf /var/lib/apt/lists/* \
+    && pip install --no-cache-dir uv
 ENV PATH="/opt/venv/bin:$PATH"
 
 COPY api/pyproject.toml ./

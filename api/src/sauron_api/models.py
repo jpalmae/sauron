@@ -44,6 +44,9 @@ class Camera(Base):
     latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     analytics_profile: Mapped[str] = mapped_column(String(20), default="traffic")
+    probe_status: Mapped[str] = mapped_column(String(20), default="untested")
+    last_probe_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    probe_details: Mapped[dict | None] = mapped_column(JSONBCompat, nullable=True)
 
 
 class AnalyticsEvent(Base):
@@ -63,9 +66,7 @@ class AnalyticsEvent(Base):
     object_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     vehicle_class: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
     extra: Mapped[dict | None] = mapped_column(JSONBCompat, nullable=True, name="metadata")
-    acknowledged_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     acknowledged_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
     feedback: Mapped[str | None] = mapped_column(String(20), nullable=True)
     # CLIP visual embedding (pgvector); set when embeddings are enabled
@@ -117,10 +118,50 @@ class NotificationChannel(Base):
     type: Mapped[str] = mapped_column(String(20))  # webhook | email | telegram
     config: Mapped[dict] = mapped_column(JSON)
     min_priority: Mapped[str] = mapped_column(String(20), default="critical")
-    camera_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("cameras.id"), nullable=True
-    )
+    camera_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("cameras.id"), nullable=True)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    cooldown_seconds: Mapped[int] = mapped_column(Integer, default=60)
+    max_attempts: Mapped[int] = mapped_column(Integer, default=5)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+
+class NotificationDelivery(Base):
+    __tablename__ = "notification_deliveries"
+    __table_args__ = (UniqueConstraint("channel_id", "dedupe_key"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    channel_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("notification_channels.id"))
+    event_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True, index=True)
+    dedupe_key: Mapped[str] = mapped_column(String(255))
+    status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    next_attempt_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), index=True
+    )
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    payload: Mapped[dict] = mapped_column(JSONBCompat, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+
+class ReportSchedule(Base):
+    __tablename__ = "report_schedules"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(100))
+    channel_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("notification_channels.id"))
+    camera_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("cameras.id"), nullable=True)
+    frequency: Mapped[str] = mapped_column(String(20), default="daily")
+    hour: Mapped[int] = mapped_column(Integer, default=8)
+    minute: Mapped[int] = mapped_column(Integer, default=0)
+    timezone: Mapped[str] = mapped_column(String(64), default="America/Santiago")
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    next_run_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )

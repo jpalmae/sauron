@@ -64,11 +64,32 @@ function AlertRow({
         </button>
       )}
       {alert.snapshot_url && (
-        <img
-          src={alert.snapshot_url}
-          alt="evidencia"
-          className="h-12 w-20 shrink-0 rounded border border-line object-cover"
-        />
+        <a
+          href={alert.clip_url ?? alert.snapshot_url}
+          target="_blank"
+          rel="noreferrer"
+          title={alert.clip_url ? "Abrir clip de evidencia" : "Abrir snapshot de evidencia"}
+          className="relative h-12 w-20 shrink-0"
+        >
+          <img
+            src={alert.snapshot_url}
+            alt="evidencia"
+            className="h-full w-full rounded border border-line object-cover"
+          />
+          {alert.clip_url && (
+            <span className="absolute bottom-0.5 right-0.5 rounded bg-black/75 px-1 font-mono text-[8px] text-white">
+              CLIP
+            </span>
+          )}
+        </a>
+      )}
+      {!alert.snapshot_url && meta.evidence_status === "pending" && (
+        <div
+          className="flex h-12 w-20 shrink-0 items-center justify-center border border-dashed border-line bg-base font-mono text-[9px] text-dim"
+          title="El evento ya fue registrado; el clip se agregará en segundo plano"
+        >
+          preparando clip
+        </div>
       )}
     </div>
   );

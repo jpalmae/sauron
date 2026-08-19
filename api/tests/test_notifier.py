@@ -3,10 +3,16 @@ from datetime import UTC, datetime
 
 import httpx
 import pytest
+from sqlalchemy import select
 
 from sauron_api.db import get_session_factory
-from sauron_api.models import AnalyticsEvent, NotificationChannel
-from sauron_api.notifier import build_payload, matches, notify_channels
+from sauron_api.models import (
+    AnalyticsEvent,
+    NotificationChannel,
+    NotificationDelivery,
+    ReportSchedule,
+)
+from sauron_api.notifier import build_payload, matches, notify_channels, safe_provider_error
 
 
 def _event(priority="warning", camera_id=None):
@@ -59,6 +65,16 @@ class TestPayload:
         assert p["metadata"]["plate_text"] == "ABC123"
         assert p["event_type"] == "WRONG_WAY"
 
+    def test_provider_errors_redact_channel_secrets(self):
+        error = RuntimeError("POST https://secret.example/hook failed with token-123")
+
+        result = safe_provider_error(
+            error, {"url": "https://secret.example/hook", "bot_token": "token-123"}
+        )
+
+        assert "secret.example" not in result
+        assert "token-123" not in result
+
 
 class TestNotify:
     @pytest.fixture(autouse=True)
@@ -66,6 +82,8 @@ class TestNotify:
         from sqlalchemy import delete
 
         async with get_session_factory()() as session:
+            await session.execute(delete(NotificationDelivery))
+            await session.execute(delete(ReportSchedule))
             await session.execute(delete(NotificationChannel))
             await session.commit()
 
@@ -101,7 +119,9 @@ class TestNotify:
                 )
             )
             await session.commit()
-            sent = await notify_channels(session, _event("critical"), "cam-02", _capture_client(calls))
+            sent = await notify_channels(
+                session, _event("critical"), "cam-02", _capture_client(calls)
+            )
             assert sent == 1
         assert "api.telegram.org/botT0K3N/sendMessage" in calls[0][1]
         assert "chat_id" in calls[0][2] and '"123"' in calls[0][2]
@@ -115,12 +135,53 @@ class TestNotify:
 
         client = httpx.AsyncClient(transport=httpx.MockTransport(failing_handler))
         async with get_session_factory()() as session:
-            session.add(NotificationChannel(
-                name="bad", type="webhook", config={"url": "https://fail.example.com"},
-                min_priority="info", enabled=True))
-            session.add(NotificationChannel(
-                name="good", type="webhook", config={"url": "https://ok.example.com"},
-                min_priority="info", enabled=True))
+            session.add(
+                NotificationChannel(
+                    name="bad",
+                    type="webhook",
+                    config={"url": "https://fail.example.com"},
+                    min_priority="info",
+                    enabled=True,
+                )
+            )
+            session.add(
+                NotificationChannel(
+                    name="good",
+                    type="webhook",
+                    config={"url": "https://ok.example.com"},
+                    min_priority="info",
+                    enabled=True,
+                )
+            )
             await session.commit()
             sent = await notify_channels(session, _event("warning"), "cam", client)
             assert sent == 1  # the good one still goes out
+
+    async def test_production_path_queues_durable_delivery(self):
+        async with get_session_factory()() as session:
+            channel = NotificationChannel(
+                name="queued",
+                type="webhook",
+                config={"url": "https://hooks.example.com/sauron"},
+                min_priority="info",
+                enabled=True,
+                cooldown_seconds=60,
+                max_attempts=5,
+            )
+            event = _event("critical")
+            session.add_all([channel, event])
+            await session.commit()
+            await session.refresh(event)
+
+            queued = await notify_channels(session, event, "cam-03")
+            delivery = (
+                await session.execute(
+                    select(NotificationDelivery).where(
+                        NotificationDelivery.event_id == event.event_id
+                    )
+                )
+            ).scalar_one()
+
+            assert queued == 1
+            assert delivery.status == "pending"
+            assert delivery.payload["camera"] == "cam-03"

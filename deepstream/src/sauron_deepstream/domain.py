@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+import uuid
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, Literal
@@ -134,20 +135,18 @@ class Event:
     rule_id: str
     object_id: int | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+    event_id: str = field(default_factory=lambda: str(uuid.uuid4()))
 
     def to_dict(self) -> dict[str, Any]:
         return {
+            "event_id": self.event_id,
             "event_type": str(self.event_type),
             "camera_id": self.camera_id,
             "timestamp": self.timestamp,
-            "timestamp_iso": time.strftime(
-                "%Y-%m-%dT%H:%M:%S", time.gmtime(self.timestamp)
-            ),
+            "timestamp_iso": time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(self.timestamp)),
             "confidence": round(self.confidence, 4),
             "priority": str(self.priority),
             "rule_id": self.rule_id,
             "object_id": self.object_id,
             "metadata": self.metadata,
-            "has_snapshot": False,
-            "has_clip": False,
         }

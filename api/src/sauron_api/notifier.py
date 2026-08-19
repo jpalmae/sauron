@@ -2,17 +2,35 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .models import AnalyticsEvent, NotificationChannel
+from .config import get_settings
+from .models import AnalyticsEvent, NotificationChannel, NotificationDelivery
 
 log = logging.getLogger(__name__)
 
 _PRIORITY_RANK = {"info": 0, "warning": 1, "critical": 2}
+
+
+def safe_provider_error(error: Exception, config: dict) -> str:
+    """Return an operator-useful provider error without persisting channel secrets."""
+    message = str(error)
+    for key in ("url", "bot_token", "password"):
+        value = config.get(key)
+        if value:
+            message = message.replace(str(value), f"<redacted-{key.replace('_', '-')}>")
+    headers = config.get("headers")
+    if isinstance(headers, dict):
+        for value in headers.values():
+            if value:
+                message = message.replace(str(value), "<redacted-header>")
+    return message[:1000] or type(error).__name__
 
 
 def matches(channel: NotificationChannel, event: AnalyticsEvent, camera_stream: str) -> bool:
@@ -42,7 +60,7 @@ async def notify_channels(
     camera_stream: str,
     client: httpx.AsyncClient | None = None,
 ) -> int:
-    """Fan out an event to all matching notification channels. Returns sent count."""
+    """Queue matching channels durably; an injected client keeps unit/direct mode synchronous."""
     result = await session.execute(
         select(NotificationChannel).where(NotificationChannel.enabled.is_(True))
     )
@@ -53,24 +71,56 @@ async def notify_channels(
         if not matches(ch, event, camera_stream):
             continue
         try:
-            if ch.type == "webhook":
-                await _send_webhook(ch.config, payload, client)
-            elif ch.type == "telegram":
-                await _send_telegram(ch.config, payload, client)
-            elif ch.type == "email":
-                await _send_email(ch.config, payload)
+            if client is not None:
+                await send_payload(ch, payload, client)
             else:
-                log.warning("unknown channel type: %s", ch.type)
-                continue
+                cooldown = max(0, ch.cooldown_seconds)
+                bucket = int(event.timestamp.timestamp()) // cooldown if cooldown else 0
+                dedupe_key = (
+                    f"event:{event.camera_id}:{event.event_type}:{event.rule_id}:{bucket}"
+                    if cooldown
+                    else f"event:{event.event_id}"
+                )
+                delivery = NotificationDelivery(
+                    channel_id=ch.id,
+                    event_id=event.event_id,
+                    dedupe_key=dedupe_key,
+                    status="pending",
+                    next_attempt_at=datetime.now(UTC)
+                    + timedelta(seconds=get_settings().notification_evidence_grace_seconds),
+                    payload=payload,
+                )
+                try:
+                    async with session.begin_nested():
+                        session.add(delivery)
+                        await session.flush()
+                except IntegrityError:
+                    log.info("notification suppressed by cooldown: %s", dedupe_key)
+                    continue
             sent += 1
         except Exception:
             log.exception("notification failed: channel %s (%s)", ch.name, ch.type)
+    if client is None:
+        await session.commit()
     return sent
 
 
-async def _send_webhook(
-    config: dict, payload: dict, client: httpx.AsyncClient | None
+async def send_payload(
+    channel: NotificationChannel,
+    payload: dict,
+    client: httpx.AsyncClient | None = None,
 ) -> None:
+    if channel.type == "webhook":
+        await _send_webhook(channel.config, payload, client)
+    elif channel.type == "telegram":
+        await _send_telegram(channel.config, payload, client)
+    elif channel.type == "email":
+        await _send_email(channel.config, payload)
+    else:
+        raise ValueError(f"unknown channel type: {channel.type}")
+
+
+async def _send_webhook(config: dict, payload: dict, client: httpx.AsyncClient | None) -> None:
     url = config["url"]
     headers = config.get("headers", {})
     http = client or httpx.AsyncClient(timeout=10.0)
@@ -83,9 +133,7 @@ async def _send_webhook(
             await http.aclose()
 
 
-async def _send_telegram(
-    config: dict, payload: dict, client: httpx.AsyncClient | None
-) -> None:
+async def _send_telegram(config: dict, payload: dict, client: httpx.AsyncClient | None) -> None:
     token = config["bot_token"]
     chat_id = config["chat_id"]
     meta = payload["metadata"]
@@ -97,6 +145,9 @@ async def _send_telegram(
         f"{payload['camera']} · {payload['rule_id']}\n"
         f"{payload['timestamp'][:19]}"
         + (f"\n{extras}" if extras else "")
+        + (f"\n📷 {payload['snapshot_url']}" if payload.get("snapshot_url") else "")
+        + (f"\n🎬 {payload['clip_url']}" if payload.get("clip_url") else "")
+        + (f"\n📊 {payload['report_url']}" if payload.get("report_url") else "")
     )
     http = client or httpx.AsyncClient(timeout=10.0)
     close = client is None

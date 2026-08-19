@@ -10,7 +10,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # Add the codecs intentionally omitted from the runtime image (notably HLS)
 # and repair the GStreamer plugins using NVIDIA's bundled installer.
 RUN /opt/nvidia/deepstream/deepstream/user_additional_install.sh \
-    && apt-get install -y --no-install-recommends python3.12-venv \
+    && apt-get install -y --no-install-recommends ffmpeg python3.12-venv \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

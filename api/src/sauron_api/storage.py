@@ -60,8 +60,9 @@ class SnapshotStorage:
                 ]
             ),
         )
-        log.info("bucket %s lifecycle: evidence expires after %d days",
-                 self._settings.s3_bucket, days)
+        log.info(
+            "bucket %s lifecycle: evidence expires after %d days", self._settings.s3_bucket, days
+        )
 
     def _get_public_client(self):
         """Client bound to the browser-reachable endpoint (presigned URLs).
@@ -92,9 +93,7 @@ class SnapshotStorage:
             client.make_bucket(bucket)
         client.put_object(bucket, key, io.BytesIO(data), len(data), content_type=content_type)
 
-    async def upload_snapshot(
-        self, camera_id: uuid.UUID, ts: datetime, jpeg: bytes
-    ) -> str | None:
+    async def upload_snapshot(self, camera_id: uuid.UUID, ts: datetime, jpeg: bytes) -> str | None:
         if not self.enabled:
             return None
         key = f"snapshots/{camera_id}/{ts:%Y/%m/%d/%H%M%S}-{uuid.uuid4().hex[:8]}.jpg"
@@ -105,9 +104,7 @@ class SnapshotStorage:
             log.exception("snapshot upload failed")
             return None
 
-    async def upload_clip(
-        self, camera_id: uuid.UUID, ts: datetime, mp4: bytes
-    ) -> str | None:
+    async def upload_clip(self, camera_id: uuid.UUID, ts: datetime, mp4: bytes) -> str | None:
         if not self.enabled:
             return None
         key = f"clips/{camera_id}/{ts:%Y/%m/%d/%H%M%S}-{uuid.uuid4().hex[:8]}.mp4"
@@ -116,6 +113,19 @@ class SnapshotStorage:
             return key
         except Exception:
             log.exception("clip upload failed")
+            return None
+
+    async def upload_report(
+        self, schedule_id: uuid.UUID, ts: datetime, data: bytes, extension: str = "csv"
+    ) -> str | None:
+        if not self.enabled:
+            return None
+        key = f"reports/{schedule_id}/{ts:%Y/%m/%d/%H%M%S}.{extension}"
+        try:
+            await asyncio.to_thread(self._put, key, data, "text/csv; charset=utf-8")
+            return key
+        except Exception:
+            log.exception("scheduled report upload failed")
             return None
 
     def _presign(self, key: str) -> str | None:

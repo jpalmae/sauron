@@ -21,6 +21,31 @@ export interface Camera {
   latitude: number | null;
   longitude: number | null;
   analytics_profile: "traffic" | "people";
+  probe_status: "untested" | "ok" | "failed";
+  last_probe_at: string | null;
+  probe_details: CameraProbe | null;
+}
+
+export interface CameraProbe {
+  status: "ok" | "failed";
+  latency_ms: number;
+  codec: string | null;
+  width: number | null;
+  height: number | null;
+  fps: number | null;
+  pixel_format: string | null;
+  bitrate_kbps: number | null;
+  preview_jpeg?: string | null;
+  error: string | null;
+}
+
+export interface OnvifDevice {
+  endpoint: string;
+  ip: string;
+  xaddrs: string[];
+  scopes: string[];
+  name: string;
+  location: string;
 }
 
 export interface EventItem {
@@ -161,6 +186,14 @@ export const api = {
       body: JSON.stringify({ email, password }),
     }),
   cameras: () => apiFetch<Camera[]>("/api/v1/cameras"),
+  probeCameraUrl: (url: string) =>
+    apiFetch<CameraProbe>("/api/v1/cameras/probe", {
+      method: "POST",
+      body: JSON.stringify({ url }),
+    }),
+  probeCamera: (id: string) =>
+    apiFetch<CameraProbe>(`/api/v1/cameras/${id}/probe`, { method: "POST" }),
+  discoverOnvif: () => apiFetch<OnvifDevice[]>("/api/v1/cameras/discover/onvif"),
   createCamera: (c: Partial<Camera>) =>
     apiFetch<Camera>("/api/v1/cameras", { method: "POST", body: JSON.stringify(c) }),
   updateCamera: (id: string, patch: Partial<Camera>) =>
@@ -232,6 +265,8 @@ export const api = {
         min_priority: string;
         camera_id: string | null;
         enabled: boolean;
+        cooldown_seconds: number;
+        max_attempts: number;
       }[]
     >("/api/v1/notifications"),
   createChannel: (c: Record<string, unknown>) =>
@@ -247,6 +282,52 @@ export const api = {
     }),
   testChannel: (id: string) =>
     apiFetch(`/api/v1/notifications/${id}/test`, { method: "POST" }),
+  reportSchedules: () =>
+    apiFetch<
+      {
+        id: string;
+        name: string;
+        channel_id: string;
+        camera_id: string | null;
+        frequency: "daily" | "weekly" | "monthly";
+        hour: number;
+        minute: number;
+        timezone: string;
+        enabled: boolean;
+        next_run_at: string;
+        last_run_at: string | null;
+      }[]
+    >("/api/v1/report-schedules"),
+  createReportSchedule: (schedule: Record<string, unknown>) =>
+    apiFetch("/api/v1/report-schedules", {
+      method: "POST",
+      body: JSON.stringify(schedule),
+    }),
+  updateReportSchedule: (id: string, patch: Record<string, unknown>) =>
+    apiFetch(`/api/v1/report-schedules/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    }),
+  deleteReportSchedule: (id: string) =>
+    fetch(`${BASE}/api/v1/report-schedules/${id}`, {
+      method: "DELETE",
+      headers: auth.token() ? { Authorization: `Bearer ${auth.token()}` } : {},
+    }).then((response) => {
+      if (!response.ok) throw new Error(`API ${response.status}`);
+    }),
+  notificationDeliveries: () =>
+    apiFetch<
+      {
+        id: string;
+        channel_id: string;
+        event_id: string | null;
+        status: string;
+        attempts: number;
+        delivered_at: string | null;
+        last_error: string | null;
+        created_at: string;
+      }[]
+    >("/api/v1/notification-deliveries?limit=100"),
   occupancy: (cameraId: string) =>
     apiFetch<OccupancyStats>(`/api/v1/cameras/${cameraId}/occupancy`),
   detections: (cameraId: string) =>

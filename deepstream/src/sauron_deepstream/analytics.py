@@ -7,6 +7,7 @@ from typing import Any
 
 from .bridge import RedisStreamBridge
 from .domain import Frame, TrackedObject
+from .evidence import EvidenceManager
 from .metrics import Metrics
 from .registry import Camera, CameraRegistry
 from .rules import RulesEngine
@@ -99,7 +100,9 @@ class TrackAssembler:
         stale = [
             key
             for key, state in self._state.items()
-            if key[0] == camera_id and key not in active and frame_number - state.last_frame > self._fps * 5
+            if key[0] == camera_id
+            and key not in active
+            and frame_number - state.last_frame > self._fps * 5
         ]
         for key in stale:
             self._state.pop(key, None)
@@ -116,11 +119,13 @@ class MetadataProcessor:
         metrics: Metrics,
         labels: list[str],
         fps: int,
+        evidence: EvidenceManager | None = None,
     ) -> None:
         self._registry = registry
         self._bridge = bridge
         self._metrics = metrics
         self._fps = fps
+        self._evidence = evidence
         self._tracks = TrackAssembler(labels, fps)
         self._engines: dict[str, tuple[str, RulesEngine]] = {}
         self._vehicle_types: dict[tuple[str, int], str] = {}
@@ -202,6 +207,9 @@ class MetadataProcessor:
                     if vehicle_type:
                         event.metadata["vehicle_type"] = vehicle_type
                 self._metrics.record_event(camera.stream_id)
+                if self._evidence is not None:
+                    queued = self._evidence.submit(event, camera, tracks, width, height)
+                    event.metadata["evidence_status"] = "pending" if queued else "unavailable"
                 self._bridge.submit_event(event)
 
     def _engine(self, camera: Camera) -> RulesEngine | None:

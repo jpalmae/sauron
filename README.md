@@ -133,8 +133,21 @@ revisada se exporta en COCO, compatible con flujos de entrenamiento NVIDIA TAO:
 GET /api/v1/reports/dataset-coco.zip
 ```
 
-La generación de snapshots/clips desde el plano DeepStream y el entrenamiento
-automatizado son trabajos posteriores; no se anuncian como capacidades activas.
+DeepStream mantiene un buffer circular codificado por cámara. Cada evento recibe de forma
+asíncrona un snapshot anotado y un clip con cinco segundos previos y diez posteriores;
+la API los conserva en S3/MinIO y actualiza el dashboard sin retrasar la alerta inicial.
+El entrenamiento automatizado sigue siendo un trabajo posterior.
+
+## Operación del servicio
+
+- El onboarding prueba la conexión con `ffprobe`, muestra preview y conserva codec,
+  resolución, FPS, bitrate y latencia. También descubre cámaras ONVIF en la red local.
+- Las notificaciones usan un outbox persistente con cooldown, deduplicación, reintentos
+  exponenciales e historial de entregas.
+- Los reportes de eventos pueden programarse diaria, semanal o mensualmente y entregarse
+  por webhook, Telegram o correo.
+
+Consulte [docs/operations.md](docs/operations.md) para configuración y diagnóstico.
 
 ## Evaluación y aceptación
 

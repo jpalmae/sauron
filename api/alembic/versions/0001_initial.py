@@ -9,17 +9,15 @@ from __future__ import annotations
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB
 
-from alembic import context, op
+from alembic import op
 
 revision = "0001"
 down_revision = None
 branch_labels = None
 depends_on = None
 
-JSON_TYPE = JSONB if context.get_context().dialect.name == "postgresql" else sa.JSON
-
-
 def upgrade() -> None:
+    json_type = JSONB if op.get_bind().dialect.name == "postgresql" else sa.JSON
     op.execute("CREATE EXTENSION IF NOT EXISTS timescaledb")
 
     op.create_table(
@@ -28,7 +26,7 @@ def upgrade() -> None:
         sa.Column("name", sa.String(100), nullable=False),
         sa.Column("stream_id", sa.String(100), nullable=False, unique=True),
         sa.Column("rtsp_url", sa.String(255), server_default=""),
-        sa.Column("roi_config", JSON_TYPE, nullable=True),
+        sa.Column("roi_config", json_type, nullable=True),
         sa.Column("is_active", sa.Boolean, server_default=sa.true()),
     )
 
@@ -44,7 +42,7 @@ def upgrade() -> None:
         sa.Column("clip_key", sa.String(255), nullable=True),
         sa.Column("rule_id", sa.String(100), server_default=""),
         sa.Column("object_id", sa.Integer, nullable=True),
-        sa.Column("metadata", JSON_TYPE, nullable=True),
+        sa.Column("metadata", json_type, nullable=True),
         # TimescaleDB: unique constraints must include the partitioning column.
         sa.UniqueConstraint("event_id", "timestamp"),
     )

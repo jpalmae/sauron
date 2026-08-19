@@ -20,6 +20,7 @@ class CameraCreate(BaseModel):
 
 class CameraUpdate(BaseModel):
     name: str | None = None
+    stream_id: str | None = Field(default=None, min_length=1, max_length=100)
     rtsp_url: str | None = None
     roi_config: dict[str, Any] | None = None
     is_active: bool | None = None
@@ -38,6 +39,9 @@ class CameraRead(BaseModel):
     latitude: float | None = None
     longitude: float | None = None
     analytics_profile: Literal["traffic", "people"] = "traffic"
+    probe_status: Literal["untested", "ok", "failed"] = "untested"
+    last_probe_at: datetime | None = None
+    probe_details: dict[str, Any] | None = None
 
     model_config = {"from_attributes": True}
 
@@ -45,6 +49,7 @@ class CameraRead(BaseModel):
 class EventIngest(BaseModel):
     """Payload published by the DeepStream video plane (Redis or direct POST)."""
 
+    event_id: uuid.UUID | None = None
     event_type: str
     camera_id: str  # stream_id, resolved to cameras.id at ingest
     timestamp: float

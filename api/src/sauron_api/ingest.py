@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import logging
+import uuid
 from datetime import UTC, datetime
 
 from sqlalchemy import select
@@ -56,6 +57,7 @@ async def ingest_event(
             clip_key = await storage.upload_clip(camera.id, ts, mp4)
 
     row = AnalyticsEvent(
+        event_id=payload.event_id or uuid.uuid4(),
         timestamp=ts,
         camera_id=camera.id,
         event_type=payload.event_type,
