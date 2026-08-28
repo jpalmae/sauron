@@ -105,7 +105,7 @@ function WhepVideo({ url, onState }: { url: string; onState: (s: TileState) => v
   return <video ref={videoRef} autoPlay muted playsInline className="aspect-video w-full object-cover" />;
 }
 
-function LiveTile({ camera }: { camera: Camera }) {
+function LiveTile({ camera, onOpen }: { camera: Camera; onOpen?: (c: Camera) => void }) {
   const [source, setSource] = useState<{ kind: string; url: string } | null>(null);
   const [state, setState] = useState<TileState>("connecting");
   const [analyticsState, setAnalyticsState] = useState<AnalyticsState>("connecting");
@@ -126,7 +126,10 @@ function LiveTile({ camera }: { camera: Camera }) {
   }, [camera.stream_id]);
 
   return (
-    <div className="group relative overflow-hidden rounded-lg border border-line bg-panel">
+    <div
+      className="group relative cursor-pointer overflow-hidden rounded-lg border border-line bg-panel transition-colors hover:border-brand/50"
+      onClick={() => onOpen?.(camera)}
+    >
       <DetectionsOverlay cameraId={camera.id} onState={setAnalyticsState} />
       {source?.kind === "hls" && <HlsVideo url={source.url} onState={setState} />}
       {source?.kind === "whep" && <WhepVideo url={source.url} onState={setState} />}
@@ -175,6 +178,7 @@ function LiveTile({ camera }: { camera: Camera }) {
 }
 
 export default function CameraGrid({ cameras }: { cameras: Camera[] }) {
+  const [openCam, setOpenCam] = useState<Camera | null>(null);
   const active = cameras.filter((c) => c.is_active);
   if (active.length === 0) {
     return (
@@ -200,8 +204,72 @@ export default function CameraGrid({ cameras }: { cameras: Camera[] }) {
       }`}
     >
       {active.map((cam) => (
-        <LiveTile key={cam.id} camera={cam} />
+        <LiveTile key={cam.id} camera={cam} onOpen={setOpenCam} />
       ))}
+      {openCam && (
+        <CameraModal camera={openCam} onClose={() => setOpenCam(null)} />
+      )}
+    </div>
+  );
+}
+
+function CameraModal({ camera, onClose }: { camera: Camera; onClose: () => void }) {
+  const [source, setSource] = useState<{ kind: string; url: string } | null>(null);
+  const [state, setState] = useState<TileState>("connecting");
+
+  useEffect(() => {
+    let alive = true;
+    api
+      .liveUrl(camera.stream_id)
+      .then((s) => {
+        if (!alive) return;
+        if (s.kind === "none") setState("offline");
+        setSource(s);
+      })
+      .catch(() => alive && setState("offline"));
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => {
+      alive = false;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [camera.stream_id, onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 grid place-items-center bg-black/80 p-4 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="relative w-full max-w-5xl overflow-hidden rounded-xl border border-line bg-panel shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between border-b border-line px-4 py-3">
+          <div className="flex items-center gap-2">
+            <span className={`h-2 w-2 rounded-full ${state === "live" ? "bg-info" : "bg-crit"}`} />
+            <span className="font-display text-sm font-medium text-ink">{camera.name}</span>
+            <span className="font-mono text-[10px] text-mut">{camera.stream_id}</span>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md border border-line px-2 py-1 text-xs text-mut hover:text-ink"
+          >
+            Cerrar (Esc)
+          </button>
+        </div>
+        <div className="relative aspect-video w-full bg-black">
+          {source?.kind === "hls" && <HlsVideo url={source.url} onState={setState} />}
+          {source?.kind === "whep" && <WhepVideo url={source.url} onState={setState} />}
+          {(!source || state !== "live") && (
+            <div className="absolute inset-0 grid place-items-center">
+              <span className="font-mono text-xs text-dim">
+                {state === "connecting" ? "conectando…" : "sin señal"}
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
