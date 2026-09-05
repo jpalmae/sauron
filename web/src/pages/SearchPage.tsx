@@ -53,14 +53,14 @@ export default function SearchPage() {
           />
         </div>
         <div className="flex overflow-hidden rounded-md border border-line">
-          {([null, "traffic", "people"] as const).map((d) => (
+          {([null, "traffic", "people", "matriculas", "streaming"] as const).map((d) => (
             <button
               key={String(d)}
               type="button"
               onClick={() => setDomain(d)}
               className={`px-3 py-2 text-xs ${domain === d ? "bg-raised text-ink" : "text-mut hover:text-ink"}`}
             >
-              {d === null ? "Todo" : d === "traffic" ? "Tráfico" : "Personas"}
+              {d === null ? "Todo" : d === "traffic" ? "Tráfico" : d === "people" ? "Personas" : d === "matriculas" ? "Matrículas" : "Streaming"}
             </button>
           ))}
         </div>

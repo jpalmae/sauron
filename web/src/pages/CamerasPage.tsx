@@ -1,7 +1,7 @@
 import { Activity, CircleCheck, CircleX, LoaderCircle, Pencil, Plus, Radar, Route, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { api, type Camera, type CameraProbe, type OnvifDevice } from "../lib/api";
+import { api, auth, type Camera, type CameraProbe, type OnvifDevice } from "../lib/api";
 import { DOMAIN_COLOR, filterCamerasByDomain, getCameraDomain, type Domain } from "../lib/domain";
 
 interface Draft {
@@ -12,6 +12,80 @@ interface Draft {
 }
 
 const EMPTY: Draft = { name: "", stream_id: "", rtsp_url: "", domain: "traffic" as Domain };
+
+const SIGNAL_REFRESH_MS = 5000;
+
+interface DsHealth {
+  cameras?: Record<string, { state?: string }>;
+}
+
+interface AlprHealth {
+  cameras?: { camera_id: string; status: string }[];
+}
+
+const CONNECTING_STATES = new Set(["starting", "recovering", "waiting-inference", "connecting"]);
+
+function useSignalStatus() {
+  const [ds, setDs] = useState<Record<string, string>>({});
+  const [alpr, setAlpr] = useState<Record<string, string>>({});
+  useEffect(() => {
+    let alive = true;
+    const tick = async () => {
+      const headers: Record<string, string> = auth.token()
+        ? { Authorization: `Bearer ${auth.token()}` }
+        : {};
+      try {
+        // DeepStream responde 503 (con JSON válido) cuando hay cámaras caídas.
+        const r = await fetch("/deepstream/healthz", { headers });
+        if (r.status === 200 || r.status === 503) {
+          const d: DsHealth = await r.json();
+          const map: Record<string, string> = {};
+          for (const [k, v] of Object.entries(d.cameras ?? {})) map[k] = v.state ?? "";
+          if (alive) setDs(map);
+        }
+      } catch {
+        /* motor sin respuesta: conserva el último estado */
+      }
+      try {
+        const r = await fetch("/alpr/healthz", { headers });
+        if (r.ok) {
+          const d: AlprHealth = await r.json();
+          const map: Record<string, string> = {};
+          for (const c of d.cameras ?? []) map[c.camera_id] = c.status;
+          if (alive) setAlpr(map);
+        }
+      } catch {
+        /* ídem */
+      }
+    };
+    tick();
+    const timer = setInterval(tick, SIGNAL_REFRESH_MS);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
+  }, []);
+  return { ds, alpr };
+}
+
+function signalFor(
+  cam: Camera,
+  ds: Record<string, string>,
+  alpr: Record<string, string>,
+): { label: string; cls: string } {
+  const dsState = ds[cam.stream_id] ?? "";
+  const alprStatus = alpr[cam.stream_id] ?? "";
+  if (dsState === "live" || alprStatus === "live") {
+    return { label: "en vivo", cls: "border-info/40 bg-info/10 text-info" };
+  }
+  if (!cam.is_active) {
+    return { label: "inactiva", cls: "border-line text-dim" };
+  }
+  if (CONNECTING_STATES.has(dsState) || CONNECTING_STATES.has(alprStatus)) {
+    return { label: "conectando", cls: "border-warn/40 bg-warn/10 text-warn" };
+  }
+  return { label: "sin señal", cls: "border-crit/40 bg-crit/10 text-crit" };
+}
 
 function CameraForm({
   initial,
@@ -87,6 +161,8 @@ function CameraForm({
         >
           <option value="traffic">🚗 Tráfico</option>
           <option value="people">🧍 Personas</option>
+          <option value="matriculas">🔢 Matrículas</option>
+          <option value="streaming">📺 Streaming</option>
         </select>
       </div>
       <input
@@ -174,6 +250,7 @@ export default function CamerasPage() {
   const [discoveryDone, setDiscoveryDone] = useState(false);
   const [probingCamera, setProbingCamera] = useState<string | null>(null);
   const filteredCameras = domainFilter ? filterCamerasByDomain(cameras, domainFilter) : cameras;
+  const { ds, alpr } = useSignalStatus();
 
   const reload = () => api.cameras().then(setCameras).catch(console.error);
   useEffect(() => {
@@ -185,13 +262,21 @@ export default function CamerasPage() {
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="font-display text-xl font-semibold">Cámaras</h1>
         <div className="flex overflow-hidden rounded-md border border-line">
-          {([null, "traffic", "people"] as const).map((d) => (
+          {([null, "traffic", "people", "matriculas", "streaming"] as const).map((d) => (
             <button
               key={String(d)}
               onClick={() => setDomainFilter(d)}
               className={`px-3 py-1.5 text-xs ${domainFilter === d ? "bg-raised text-ink" : "text-mut hover:text-ink"}`}
             >
-              {d === null ? "Todas" : d === "traffic" ? "Tráfico" : "Personas"}
+              {d === null
+                ? "Todas"
+                : d === "traffic"
+                  ? "Tráfico"
+                  : d === "people"
+                    ? "Personas"
+                    : d === "matriculas"
+                      ? "Matrículas"
+                      : "Streaming"}
             </button>
           ))}
         </div>
@@ -316,6 +401,8 @@ export default function CamerasPage() {
                     >
                       <option value="traffic">Tráfico</option>
                       <option value="people">Personas</option>
+                      <option value="matriculas">Matrículas</option>
+                      <option value="streaming">Streaming</option>
                     </select>
                   </td>
                   <td className="px-4 py-2.5 font-mono text-xs text-mut">
@@ -345,6 +432,16 @@ export default function CamerasPage() {
                     >
                       {c.is_active ? "activa" : "inactiva"}
                     </button>
+                    {(() => {
+                      const signal = signalFor(c, ds, alpr);
+                      return (
+                        <span
+                          className={`rounded-full border px-2 py-0.5 font-mono text-[10px] uppercase ${signal.cls}`}
+                        >
+                          {signal.label}
+                        </span>
+                      );
+                    })()}
                     <span
                       title={c.probe_details?.error ?? `Última prueba: ${c.last_probe_at ?? "nunca"}`}
                       className={`rounded-full border px-2 py-0.5 font-mono text-[10px] ${

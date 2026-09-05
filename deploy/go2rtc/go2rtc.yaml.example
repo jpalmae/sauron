@@ -14,3 +14,10 @@ webrtc:
 #   "<mihome_account_id>": "V1:..."   # filled by the WebUI on login
 # streams:
 #   my-cam: "xiaomi://<account_id>:<region>@<camera_ip>?did=<device_id>&model=<model>"
+
+  # Demo ALPR (requiere clips en ./deploy/go2rtc/clips/): loop de tráfico
+  # Tobalaba/Apoquindo y clip ANPR con patentes chilenas de cerca.
+  # cl-tobalaba-demo:
+  #   - exec:ffmpeg -re -stream_loop -1 -i /config/clips/tobalaba.mp4 -c copy -f mpegts pipe:1#video=h264#backoff=5
+  # cl-plates-demo:
+  #   - exec:ffmpeg -re -stream_loop -1 -i /config/clips/patentes-chile.mkv -c copy -f mpegts pipe:1#video=h264#backoff=5
