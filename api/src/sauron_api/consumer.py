@@ -12,7 +12,7 @@ from .schemas import EventIngest
 log = logging.getLogger(__name__)
 
 
-async def _process_payload(payload: EventIngest) -> None:
+async def process_payload(payload: EventIngest):
     from .db import get_session_factory
     from .storage import get_storage
     from .ws import manager
@@ -73,6 +73,7 @@ async def _process_payload(payload: EventIngest) -> None:
                         "clip_key": None,
                     }
                 )
+        return row
 
 
 RedisFields = dict[str | bytes, str | bytes]
@@ -141,7 +142,7 @@ async def run_consumer(app) -> None:
                             log.warning("discarding malformed event %r", message_id, exc_info=True)
                             await client.xack(stream, group, message_id)
                             continue
-                        await _process_payload(payload)
+                        await process_payload(payload)
                         await client.xack(stream, group, message_id)
         except asyncio.CancelledError:
             raise

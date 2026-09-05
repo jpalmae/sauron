@@ -15,7 +15,7 @@ class CameraCreate(BaseModel):
     is_active: bool = True
     latitude: float | None = None
     longitude: float | None = None
-    analytics_profile: Literal["traffic", "people"] = "traffic"
+    analytics_profile: Literal["traffic", "people", "matriculas", "streaming"] = "traffic"
 
 
 class CameraUpdate(BaseModel):
@@ -26,7 +26,7 @@ class CameraUpdate(BaseModel):
     is_active: bool | None = None
     latitude: float | None = None
     longitude: float | None = None
-    analytics_profile: Literal["traffic", "people"] | None = None
+    analytics_profile: Literal["traffic", "people", "matriculas", "streaming"] | None = None
 
 
 class CameraRead(BaseModel):
@@ -38,7 +38,7 @@ class CameraRead(BaseModel):
     is_active: bool
     latitude: float | None = None
     longitude: float | None = None
-    analytics_profile: Literal["traffic", "people"] = "traffic"
+    analytics_profile: Literal["traffic", "people", "matriculas", "streaming"] = "traffic"
     probe_status: Literal["untested", "ok", "failed"] = "untested"
     last_probe_at: datetime | None = None
     probe_details: dict[str, Any] | None = None

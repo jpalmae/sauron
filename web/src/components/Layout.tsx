@@ -1,4 +1,4 @@
-import { Activity, Bell, Camera, Car, ChartColumn, LogOut, Map, ScrollText, Search, Users, Video, ChevronDown } from "lucide-react";
+import { Activity, Bell, Camera, Car, ChartColumn, LogOut, Map, ScanLine, ScrollText, Search, Users, Video, ChevronDown } from "lucide-react";
 import { useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { auth } from "../lib/api";
@@ -75,6 +75,10 @@ export default function Layout({ wsConnected }: { wsConnected: boolean }) {
             <NavItem to="/traffic/live" label="En vivo" icon={Video} />
             <NavItem to="/traffic/analytics" label="Analítica" icon={ChartColumn} />
             <NavItem to="/traffic/events" label="Eventos" icon={ScrollText} />
+          </Section>
+          <Section label="Matrículas" icon={ScanLine} color="text-info" defaultOpen>
+            <NavItem to="/alpr" label="En vivo" icon={Video} />
+            <NavItem to="/alpr/eventos" label="Eventos" icon={ScrollText} />
           </Section>
           <Section label="Personas" icon={Users} color="text-warn" defaultOpen>
             <NavItem to="/people/live" label="En vivo" icon={Video} />

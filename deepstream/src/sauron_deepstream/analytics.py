@@ -36,10 +36,17 @@ class Detection:
 class TrackAssembler:
     """Convert NvDCF metadata to the rule engine's stable track contract."""
 
-    def __init__(self, labels: list[str], fps: int, history_size: int = 60) -> None:
+    def __init__(
+        self,
+        labels: list[str],
+        fps: int,
+        history_size: int = 60,
+        allowed_classes: set[str] | None = None,
+    ) -> None:
         self._labels = labels
         self._fps = fps
         self._history_size = history_size
+        self._allowed = {c.lower() for c in allowed_classes} if allowed_classes else None
         self._state: dict[tuple[str, int], _TrackState] = {}
 
     def assemble(
@@ -77,6 +84,9 @@ class TrackAssembler:
             active.add(key)
             class_id = detection.class_id
             label = self._labels[class_id] if 0 <= class_id < len(self._labels) else str(class_id)
+            if self._allowed is not None and label.lower() not in self._allowed:
+                # Classes outside the allowed set do not reach the rule engine.
+                continue
             score = (
                 detection.tracker_confidence
                 if detection.tracker_confidence > 0
@@ -120,13 +130,14 @@ class MetadataProcessor:
         labels: list[str],
         fps: int,
         evidence: EvidenceManager | None = None,
+        allowed_classes: set[str] | None = None,
     ) -> None:
         self._registry = registry
         self._bridge = bridge
         self._metrics = metrics
         self._fps = fps
         self._evidence = evidence
-        self._tracks = TrackAssembler(labels, fps)
+        self._tracks = TrackAssembler(labels, fps, allowed_classes=allowed_classes)
         self._engines: dict[str, tuple[str, RulesEngine]] = {}
         self._vehicle_types: dict[tuple[str, int], str] = {}
         self._vehicle_type_seen: dict[tuple[str, int], float] = {}

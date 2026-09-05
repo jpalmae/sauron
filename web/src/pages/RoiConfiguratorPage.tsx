@@ -180,7 +180,7 @@ export default function RoiConfiguratorPage() {
             <select
               value={cameraDomain ?? "traffic"}
               onChange={async (e) => {
-                const nd = e.target.value as "traffic" | "people";
+                const nd = e.target.value as "traffic" | "people" | "matriculas" | "streaming";
                 const patch = { analytics_profile: nd };
                 await api.updateCamera(camera.id, patch);
                 setCamera({ ...camera, ...patch } as Camera);
@@ -189,6 +189,8 @@ export default function RoiConfiguratorPage() {
             >
               <option value="traffic">🚗 Tráfico</option>
               <option value="people">🧍 Personas</option>
+              <option value="matriculas">🔢 Matrículas</option>
+              <option value="streaming">📺 Streaming</option>
             </select>
           )}
           <div className="ml-auto flex items-center gap-1.5">

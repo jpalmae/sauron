@@ -17,6 +17,7 @@ import { filterEventsByDomain, type Domain } from "../lib/domain";
 
 const TRAFFIC_TYPES = ["LINE_CROSSING", "STOPPED_VEHICLE", "OBSTRUCTION", "WRONG_WAY", "CONGESTION", "ALPR", "ALPR_WATCHLIST", "TRAVEL_TIME", "CAMERA_OFFLINE", "CAMERA_ONLINE", "AUDIO_ANOMALY"];
 const PEOPLE_TYPES = ["OCCUPANCY", "CHAIR_OCCUPANCY", "GROUPING", "FALL"];
+const MATRICULAS_TYPES = ["ALPR", "ALPR_WATCHLIST"];
 const EVENT_TYPES = [...TRAFFIC_TYPES, ...PEOPLE_TYPES];
 
 function Evidence({
@@ -112,14 +113,23 @@ export default function EventsPage({ domain }: { domain?: Domain }) {
     api.setFeedback(eventId, value).catch(console.error);
   };
 
-  const visibleTypes = domain === "traffic" ? TRAFFIC_TYPES : domain === "people" ? PEOPLE_TYPES : EVENT_TYPES;
+  const visibleTypes =
+    domain === "traffic"
+      ? TRAFFIC_TYPES
+      : domain === "people"
+        ? PEOPLE_TYPES
+        : domain === "matriculas"
+          ? MATRICULAS_TYPES
+          : EVENT_TYPES;
   const displayItems = domain && data ? filterEventsByDomain(data.items, domain) : data?.items;
 
   return (
     <div className="space-y-4 p-5">
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="font-display text-xl font-semibold">
-          Eventos{domain ? ` · ${domain === "traffic" ? "Tráfico" : "Personas"}` : ""}
+          Eventos{domain
+            ? ` · ${domain === "traffic" ? "Tráfico" : domain === "people" ? "Personas" : "Matrículas"}`
+            : ""}
         </h1>
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <select
