@@ -123,6 +123,7 @@ export interface DetectionsPayload {
 }
 
 export interface RoiConfig {
+  alpr_zone?: { x1: number; y1: number; x2: number; y2: number } | null;
   lines?: RoiLine[];
   polygons?: RoiPolygon[];
   homography?: { src_points: [number, number][]; dst_points: [number, number][] } | null;
