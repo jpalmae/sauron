@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from datetime import UTC, datetime
 from typing import cast
 
 from .ingest import ingest_event
@@ -19,12 +20,10 @@ async def process_payload(payload: EventIngest):
 
     async with get_session_factory()() as session:
         row = await ingest_event(session, get_storage(), payload)
-        storage = get_storage()
         metrics.events_ingested += 1
         metrics.ws_broadcasts += 1
         await manager.broadcast(
             {
-                "kind": "event",
                 "event_id": str(row.event_id),
                 "event_type": row.event_type,
                 "priority": row.priority,
@@ -36,8 +35,6 @@ async def process_payload(payload: EventIngest):
                 "metadata": row.extra,
                 "snapshot_key": row.snapshot_key,
                 "clip_key": row.clip_key,
-                "snapshot_url": await storage.presigned_url(row.snapshot_key),
-                "clip_url": await storage.presigned_url(row.clip_key),
             }
         )
         if row.priority in ("critical", "warning"):
@@ -52,6 +49,7 @@ async def process_payload(payload: EventIngest):
         from .notifier import notify_channels
 
         await notify_channels(session, row, payload.camera_id)
+        await _record_kpi(session, row)
         if row.event_type == "LINE_CROSSING":
             from .matcher import maybe_create_travel_time
 
@@ -59,7 +57,6 @@ async def process_payload(payload: EventIngest):
             if travel is not None:
                 await manager.broadcast(
                     {
-                        "kind": "event",
                         "event_id": str(travel.event_id),
                         "event_type": travel.event_type,
                         "priority": travel.priority,
@@ -74,6 +71,40 @@ async def process_payload(payload: EventIngest):
                     }
                 )
         return row
+
+
+async def _record_kpi(session, row) -> None:
+    """Conteo por hora y velocidad media ponderada a partir de cruces de línea."""
+    if row.event_type != "LINE_CROSSING":
+        return
+    from sqlalchemy import select
+
+    from .models import HourlyKpi
+
+    speed = (row.extra or {}).get("speed_kmh")
+    vehicle_class = row.vehicle_class or "unknown"
+    bucket = row.timestamp.astimezone(UTC).replace(minute=0, second=0, microsecond=0)
+    result = await session.execute(
+        select(HourlyKpi).where(
+            HourlyKpi.bucket == bucket,
+            HourlyKpi.camera_id == row.camera_id,
+            HourlyKpi.vehicle_class == vehicle_class,
+        )
+    )
+    kpi = result.scalar_one_or_none()
+    if kpi is None:
+        kpi = HourlyKpi(
+            bucket=bucket,
+            camera_id=row.camera_id,
+            vehicle_class=vehicle_class,
+            total_count=0,
+        )
+        session.add(kpi)
+    if speed is not None:
+        previous = (kpi.avg_speed_kmh or 0.0) * kpi.total_count
+        kpi.avg_speed_kmh = round((previous + float(speed)) / (kpi.total_count + 1), 2)
+    kpi.total_count += 1
+    await session.commit()
 
 
 RedisFields = dict[str | bytes, str | bytes]
