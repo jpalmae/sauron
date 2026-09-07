@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import difflib
 import hashlib
 import json
 import logging
@@ -12,6 +13,7 @@ import threading
 import time
 import xml.etree.ElementTree as ET
 from collections import deque
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, ClassVar
@@ -76,6 +78,86 @@ class CameraState:
 FrameItem = tuple[StreamSpec, float, np.ndarray]
 
 
+class BestShotTracker:
+    """Agrupa las lecturas de un mismo vehículo mientras se aproxima y
+    emite una sola: la de mayor certeza OCR (auto más cerca/nítido)."""
+
+    def __init__(
+        self,
+        wait_s: float,
+        emit_conf: float,
+        emit: Callable[[str, float, dict[str, Any], bytes], None],
+    ) -> None:
+        self._wait_s = wait_s
+        self._emit_conf = emit_conf
+        self._emit = emit
+        self._pending: dict[str, dict[str, Any]] = {}
+        self._lock = threading.Lock()
+
+    @staticmethod
+    def _similar(a: dict[str, Any], b: dict[str, Any]) -> bool:
+        if a.get("box") and b.get("box"):
+            ax1, ay1, ax2, ay2 = a["box"]
+            bx1, by1, bx2, by2 = b["box"]
+            ix = max(0, min(ax2, bx2) - max(ax1, bx1))
+            iy = max(0, min(ay2, by2) - max(ay1, by1))
+            inter = ix * iy
+            area_a = max(1, (ax2 - ax1) * (ay2 - ay1))
+            area_b = max(1, (bx2 - bx1) * (by2 - by1))
+            if inter / min(area_a, area_b) > 0.2:
+                return True
+        ratio = difflib.SequenceMatcher(None, a.get("plate", ""), b.get("plate", "")).ratio()
+        return ratio >= 0.6
+
+    def update(
+        self, camera_id: str, detections: list[dict[str, Any]], jpeg: bytes, ts: float
+    ) -> None:
+        with self._lock:
+            pending = self._pending.get(camera_id)
+            if pending is not None and ts - pending["last_ts"] > self._wait_s:
+                self._flush(camera_id)
+                pending = None
+            valid = [d for d in detections if 5 <= len(d.get("plate", "")) <= 8]
+            valid.sort(key=lambda d: d["ocr_confidence"], reverse=True)
+            for det in valid:
+                if pending is None:
+                    self._pending[camera_id] = {
+                        "det": det,
+                        "jpeg": jpeg,
+                        "ts": ts,
+                        "last_ts": ts,
+                    }
+                    pending = self._pending[camera_id]
+                elif self._similar(pending["det"], det):
+                    pending["last_ts"] = ts
+                    if det["ocr_confidence"] > pending["det"]["ocr_confidence"]:
+                        pending.update({"det": det, "jpeg": jpeg, "ts": ts})
+                    if pending["det"]["ocr_confidence"] >= self._emit_conf:
+                        self._flush(camera_id)
+                        pending = None
+                        break
+                else:
+                    self._flush(camera_id)
+                    self._pending[camera_id] = {
+                        "det": det,
+                        "jpeg": jpeg,
+                        "ts": ts,
+                        "last_ts": ts,
+                    }
+                    pending = self._pending[camera_id]
+                    break
+
+    def _flush(self, camera_id: str) -> None:
+        best = self._pending.pop(camera_id, None)
+        if best is not None:
+            self._emit(camera_id, best["ts"], best["det"], best["jpeg"])
+
+    def flush_all(self) -> None:
+        with self._lock:
+            for camera_id in list(self._pending):
+                self._flush(camera_id)
+
+
 class ALPRRuntime:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
@@ -96,6 +178,9 @@ class ALPRRuntime:
         self._capture_events: dict[str, threading.Event] = {}
         self._capture_threads: dict[str, threading.Thread] = {}
         self._api_added: set[str] = set()
+        self._tracker = BestShotTracker(
+            settings.bestshot_wait_s, settings.bestshot_conf, self._maybe_emit_event
+        )
         self.model_ready = False
         self.model_error: str | None = None
         self.available_providers = ort.get_available_providers()
@@ -124,7 +209,8 @@ class ALPRRuntime:
             log.info("vehicle lookup enabled in DEMO mode (datos sintéticos locales)")
         elif self.settings.vehicle_provider == "matriculaapi":
             if self.settings.matricula_username and self.settings.matricula_key:
-                self._soap_client = httpx.Client(timeout=8)
+                # Las consultas en frío a SRCEI pueden tardar >20 s.
+                self._soap_client = httpx.Client(timeout=30)
                 log.info(
                     "vehicle lookup enabled via matriculaapi (%s) — solo se envía la patente; "
                     "cámaras: %s",
@@ -237,10 +323,22 @@ class ALPRRuntime:
         rtsp = str(payload.get("rtsp_url") or "").strip()
         prefix = "rtsp://go2rtc:8554/"
         source = rtsp.removeprefix(prefix)
-        return StreamSpec(camera_id=stream_id, source=source or stream_id)
+        crop = None
+        roi = payload.get("roi_config")
+        if isinstance(roi, dict):
+            zone = roi.get("alpr_zone")
+            if isinstance(zone, dict):
+                try:
+                    x1, y1, x2, y2 = (int(zone[k]) for k in ("x1", "y1", "x2", "y2"))
+                    if x2 - x1 >= 40 and y2 - y1 >= 40:
+                        crop = (x1, y1, x2, y2)
+                except (KeyError, TypeError, ValueError):
+                    crop = None
+        return StreamSpec(camera_id=stream_id, source=source or stream_id, crop=crop)
 
     def stop(self) -> None:
         self._stop.set()
+        self._tracker.flush_all()
         for event in self._capture_events.values():
             event.set()
         for thread in self._capture_threads.values():
@@ -341,6 +439,20 @@ class ALPRRuntime:
                 log.warning("RTSP capture failed for %s: %s", spec.camera_id, exc)
                 stop_event.wait(max(2.0, interval - (time.monotonic() - started)))
 
+    @staticmethod
+    def _work_frame(
+        frame: np.ndarray, crop: tuple[int, int, int, int] | None
+    ) -> tuple[np.ndarray, float, float]:
+        if crop is None:
+            return frame, 0.0, 0.0
+        h, w = frame.shape[:2]
+        x1, y1, x2, y2 = crop
+        x1, y1 = max(0, x1), max(0, y1)
+        x2, y2 = min(w, x2), min(h, y2)
+        if x2 - x1 < 40 or y2 - y1 < 40:
+            return frame, 0.0, 0.0
+        return frame[y1:y2, x1:x2], float(x1), float(y1)
+
     def _inference_loop(self) -> None:
         assert self._alpr is not None
         while not self._stop.is_set():
@@ -353,9 +465,19 @@ class ALPRRuntime:
                 continue
             started = time.perf_counter()
             try:
-                results = self._alpr.predict(frame)
+                work, ox, oy = self._work_frame(frame, spec.crop)
+                results = self._alpr.predict(work)
                 detections = self._serialize_results(results)
-                annotated = self._draw(frame, spec.camera_id, detections)
+                if ox or oy:
+                    for det in detections:
+                        b = det["box"]
+                        det["box"] = [
+                            int(b[0] + ox),
+                            int(b[1] + oy),
+                            int(b[2] + ox),
+                            int(b[3] + oy),
+                        ]
+                annotated = self._draw(frame, spec.camera_id, detections, spec.crop)
                 encoded, jpeg = cv2.imencode(".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 85])
                 if not encoded:
                     raise ValueError("failed to encode annotated frame")
@@ -370,8 +492,7 @@ class ALPRRuntime:
                     state.inference_ms = inference_ms
                     state.detections = detections
                     state.jpeg = jpeg_bytes
-                for detection in detections:
-                    self._maybe_emit_event(spec.camera_id, captured_at, detection, jpeg_bytes)
+                self._tracker.update(spec.camera_id, detections, jpeg_bytes, captured_at)
             except Exception as exc:
                 with state.lock:
                     state.status = "error"
@@ -401,9 +522,25 @@ class ALPRRuntime:
 
     @staticmethod
     def _draw(
-        frame: np.ndarray, camera_id: str, detections: list[dict[str, Any]]
+        frame: np.ndarray,
+        camera_id: str,
+        detections: list[dict[str, Any]],
+        crop: tuple[int, int, int, int] | None = None,
     ) -> np.ndarray:
         image = frame.copy()
+        if crop is not None:
+            x1, y1, x2, y2 = crop
+            cv2.rectangle(image, (x1, y1), (x2, y2), (255, 170, 60), 2)
+            cv2.putText(
+                image,
+                "zona ALPR",
+                (x1 + 6, y1 + 24),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.7,
+                (255, 170, 60),
+                2,
+                cv2.LINE_AA,
+            )
         for detection in detections:
             x1, y1, x2, y2 = detection["box"]
             plate = detection["plate"] or "PLATE"
@@ -508,8 +645,10 @@ class ALPRRuntime:
                 cached = self._vehicle_cache.get(plate)
                 if cached and cached[0] > now:
                     return cached[1]
-            data = self._fetch_vehicle_soap(plate)
-            ttl = 7 * 86400 if data else 3600
+            data, timed_out = self._fetch_vehicle_soap(plate)
+            # SRCEI indexa patentes nuevas de forma asíncrona (>60 s la
+            # primera vez): reintenta pronto en vez de castigar por 1 h.
+            ttl = 7 * 86400 if data else (300 if timed_out else 3600)
             with self._vehicle_cache_lock:
                 self._vehicle_cache[plate] = (now + ttl, data)
             return data
@@ -549,12 +688,18 @@ class ALPRRuntime:
                 },
             )
             response.raise_for_status()
-            return self._parse_soap_vehicle(
-                response.text, plate, self.settings.vehicle_include_owner
+            return (
+                self._parse_soap_vehicle(
+                    response.text, plate, self.settings.vehicle_include_owner
+                ),
+                False,
             )
+        except httpx.TimeoutException:
+            log.warning("matriculaapi lookup timed out for %s (SRCEI indexando)", plate)
+            return None, True
         except (httpx.HTTPError, ValueError, SyntaxError):
             log.warning("matriculaapi lookup failed for %s", plate)
-            return None
+            return None, False
 
     @staticmethod
     def _parse_soap_vehicle(

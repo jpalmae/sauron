@@ -8,6 +8,7 @@ from dataclasses import dataclass
 class StreamSpec:
     camera_id: str
     source: str
+    crop: tuple[int, int, int, int] | None = None
 
 
 def parse_streams(value: str) -> tuple[StreamSpec, ...]:
@@ -70,6 +71,8 @@ class Settings:
     matricula_operation: str
     region: str
     reconcile_seconds: float
+    bestshot_wait_s: float
+    bestshot_conf: float
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -119,5 +122,7 @@ class Settings:
             ).rstrip("/"),
             matricula_operation=os.getenv("SAURON_ALPR_MATRICULA_OPERATION", "CheckChile").strip(),
             region=os.getenv("SAURON_ALPR_REGION", "").strip(),
+            bestshot_wait_s=_float_env("SAURON_ALPR_BESTSHOT_WAIT_S", 4.0, 0.5),
+            bestshot_conf=_float_env("SAURON_ALPR_BESTSHOT_CONF", 0.95, 0.5),
             reconcile_seconds=_float_env("SAURON_ALPR_RECONCILE_S", 15.0, 1.0),
         )
