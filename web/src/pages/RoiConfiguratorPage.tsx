@@ -7,6 +7,7 @@ import {
   Play,
   RefreshCw,
   Save,
+  ScanLine,
   Spline,
   Trash2,
   Undo2,
@@ -31,7 +32,7 @@ import {
   type Pt,
 } from "../lib/roi";
 
-type Tool = "select" | "polygon" | "line" | "direction" | "homography" | "delete";
+type Tool = "select" | "polygon" | "line" | "direction" | "homography" | "alpr" | "delete";
 
 const DEFAULT_THRESHOLDS: Record<string, number> = {
   stopped_seconds: 15,
@@ -50,6 +51,8 @@ type DragStart = (
   vertex: number | null,
 ) => void;
 
+type AlprZone = { x1: number; y1: number; x2: number; y2: number };
+
 function RoiCanvas(props: {
   svgRef: React.RefObject<SVGSVGElement | null>;
   imgSize: Pt;
@@ -60,6 +63,7 @@ function RoiCanvas(props: {
   draft: Pt[];
   selected: { type: "polygon" | "line"; idx: number } | null;
   cursorPt?: Pt | null;
+  alprZone?: AlprZone | null;
   onCanvasClick: (e: React.MouseEvent<SVGSVGElement>) => void;
   onDoubleClick?: () => void;
   onPointerMove: (e: React.PointerEvent<SVGSVGElement>) => void;
@@ -69,7 +73,7 @@ function RoiCanvas(props: {
   beginDrag: DragStart;
 }) {
   const {
-    svgRef, imgSize, tool, polygons, lines, homographySrc, draft, selected, cursorPt,
+    svgRef, imgSize, tool, polygons, lines, homographySrc, draft, selected, cursorPt, alprZone,
     onCanvasClick, onDoubleClick, onPointerMove, onPointerUp, onPointerLeave,
     onContextMenu, beginDrag,
   } = props;
@@ -185,6 +189,31 @@ function RoiCanvas(props: {
           </g>
         );
       })}
+      {alprZone && (
+        <g>
+          <rect
+            x={alprZone.x1}
+            y={alprZone.y1}
+            width={alprZone.x2 - alprZone.x1}
+            height={alprZone.y2 - alprZone.y1}
+            fill="rgba(255,170,60,0.08)"
+            stroke="#ffaa3c"
+            strokeWidth={3}
+            strokeDasharray="10 6"
+            className="pointer-events-none"
+          />
+          <text
+            x={alprZone.x1 + 8}
+            y={alprZone.y1 + 26}
+            fill="#ffaa3c"
+            fontSize={16}
+            fontFamily="var(--font-mono)"
+            className="pointer-events-none"
+          >
+            zona ALPR
+          </text>
+        </g>
+      )}
       {homographySrc.map((p, i) => (
         <g key={`h${i}`}>
           <circle
@@ -284,6 +313,7 @@ export default function RoiConfiguratorPage() {
   const [draft, setDraft] = useState<Pt[]>([]);
   const [selected, setSelected] = useState<{ type: "polygon" | "line"; idx: number } | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [alprZone, setAlprZone] = useState<AlprZone | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const [drag, setDrag] = useState<{
     type: "line" | "polygon" | "homography";
@@ -447,6 +477,7 @@ export default function RoiConfiguratorPage() {
         setLines(roi.lines ?? []);
         setHomographySrc((roi.homography?.src_points as Pt[]) ?? []);
         setThresholds({ ...DEFAULT_THRESHOLDS, ...(roi.thresholds ?? {}) });
+        setAlprZone(roi.alpr_zone ?? null);
       }
       // live camera frame first; latest event snapshot as fallback
       const live = cam ? await grabLiveFrame(cam.stream_id) : false;
@@ -562,6 +593,21 @@ export default function RoiConfiguratorPage() {
         setTool("select");
         setDraft([]);
       }
+    } else if (tool === "alpr") {
+      setDraft((d) => {
+        const next = [...d, p];
+        if (next.length === 2) {
+          const [a, b] = next;
+          setAlprZone({
+            x1: Math.min(a[0], b[0]),
+            y1: Math.min(a[1], b[1]),
+            x2: Math.max(a[0], b[0]),
+            y2: Math.max(a[1], b[1]),
+          });
+          return [];
+        }
+        return next;
+      });
     } else if (tool === "homography") {
       setHomographySrc((pts) => (pts.length >= 4 ? pts : [...pts, p]));
     } else if (tool === "direction" && selected) {
@@ -624,6 +670,9 @@ export default function RoiConfiguratorPage() {
   const save = async () => {
     if (!camera) return;
     const roi_config: RoiConfig = { lines, polygons, thresholds };
+    if (alprZone) {
+      roi_config.alpr_zone = alprZone;
+    }
     if (homographySrc.length === 4) {
       roi_config.homography = {
         src_points: homographySrc,
@@ -639,6 +688,7 @@ export default function RoiConfiguratorPage() {
     { key: "polygon", label: "Polígono", icon: Hexagon, hint: "click por vértice, luego Cerrar" },
     { key: "line", label: "Línea", icon: Spline, hint: "2 clicks: inicio y fin" },
     { key: "direction", label: "Dirección", icon: MoveRight, hint: "click hacia el flujo permitido" },
+    { key: "alpr", label: "Zona ALPR", icon: ScanLine, hint: "2 clicks: área donde se leen las patentes" },
     { key: "homography", label: "Homografía", icon: ImageUp, hint: "4 puntos (esquinas)" },
     { key: "delete", label: "Borrar", icon: Trash2, hint: "click sobre la figura" },
   ];
@@ -779,6 +829,7 @@ export default function RoiConfiguratorPage() {
                 )}
                 <RoiCanvas
                   cursorPt={cursorPt}
+                  alprZone={alprZone}
                   svgRef={svgRef}
                   imgSize={imgSize}
                   tool={tool}
@@ -918,6 +969,34 @@ export default function RoiConfiguratorPage() {
               </p>
             )}
           </div>
+        </section>
+
+        <section>
+          <h3 className="mb-2 font-mono text-[11px] uppercase tracking-wider text-mut">
+            Zona de lectura (ALPR)
+          </h3>
+          {alprZone ? (
+            <div className="flex flex-wrap items-center gap-2 rounded-md border border-line p-2.5 text-xs">
+              <span className="font-mono text-mut">
+                x:{Math.round(alprZone.x1)}-{Math.round(alprZone.x2)} · y:{Math.round(alprZone.y1)}-
+                {Math.round(alprZone.y2)}
+              </span>
+              <button
+                onClick={() => {
+                  setAlprZone(null);
+                  setTool("alpr");
+                }}
+                className="rounded border border-line px-2 py-1 text-[11px] text-mut hover:border-crit hover:text-crit"
+              >
+                redefinir
+              </button>
+            </div>
+          ) : (
+            <p className="text-xs text-dim">
+              Activa la herramienta Zona ALPR y marca con 2 clicks el área donde el vehículo se
+              detiene y se lee la patente. La detección se concentrará ahí.
+            </p>
+          )}
         </section>
 
         <section>
