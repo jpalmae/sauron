@@ -12,6 +12,7 @@ from .consumer import run_consumer
 from .db import close_db, get_session_factory, init_db
 from .metrics import MetricsMiddleware
 from .routers import (
+    alpr_config,
     auth,
     branding,
     cameras,
@@ -20,7 +21,6 @@ from .routers import (
     kpis,
     notifications,
     push,
-    report_schedules,
     reports,
     search,
     streams,
@@ -43,20 +43,14 @@ async def lifespan(app: FastAPI):
             from .seed import seed_cameras
 
             await seed_cameras(session, settings.seed_cameras_path)
-    background_tasks: list[asyncio.Task] = []
+    consumer_task: asyncio.Task | None = None
     if settings.consumer_enabled:
-        background_tasks.append(asyncio.create_task(run_consumer(app)))
-        from .notification_worker import run_notification_worker
-        from .scheduled_reports import run_report_scheduler
-
-        background_tasks.append(asyncio.create_task(run_notification_worker()))
-        background_tasks.append(asyncio.create_task(run_report_scheduler()))
+        consumer_task = asyncio.create_task(run_consumer(app))
     yield
-    for task in background_tasks:
-        task.cancel()
-    for task in background_tasks:
+    if consumer_task is not None:
+        consumer_task.cancel()
         try:
-            await task
+            await consumer_task
         except asyncio.CancelledError:
             pass
     await close_db()
@@ -75,6 +69,7 @@ def create_app() -> FastAPI:
     )
     app.include_router(auth.router, prefix="/api/v1")
     app.include_router(cameras.router, prefix="/api/v1")
+    app.include_router(alpr_config.router, prefix="/api/v1")
     app.include_router(events.router, prefix="/api/v1")
     app.include_router(kpis.router, prefix="/api/v1")
     app.include_router(corridors.router, prefix="/api/v1")
@@ -82,7 +77,6 @@ def create_app() -> FastAPI:
     app.include_router(push.router, prefix="/api/v1")
     app.include_router(search.router, prefix="/api/v1")
     app.include_router(reports.router, prefix="/api/v1")
-    app.include_router(report_schedules.router, prefix="/api/v1")
     app.include_router(streams.router, prefix="/api/v1")
     app.include_router(branding.router, prefix="/api/v1")
     app.include_router(ws_router)

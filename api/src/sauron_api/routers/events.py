@@ -13,8 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth import get_current_user, require_ingest
 from ..config import get_settings
+from ..consumer import process_payload
 from ..db import get_session
-from ..ingest import ingest_event
 from ..models import AnalyticsEvent, User
 from ..schemas import EventIngest, EventPage, EventRead
 from ..storage import get_storage
@@ -34,11 +34,10 @@ async def _read_upload(upload: UploadFile | None, limit: int, label: str) -> byt
 @router.post("", status_code=202)
 async def post_event(
     payload: EventIngest,
-    session: AsyncSession = Depends(get_session),
     _: None = Depends(require_ingest),
 ):
-    """Direct ingest path (alternative to the Redis consumer)."""
-    row = await ingest_event(session, get_storage(), payload)
+    """Ingest an event through the same downstream path as the Redis consumer."""
+    row = await process_payload(payload)
     return {"event_id": str(row.event_id)}
 
 

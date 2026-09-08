@@ -20,7 +20,7 @@ export interface Camera {
   is_active: boolean;
   latitude: number | null;
   longitude: number | null;
-  analytics_profile: "traffic" | "people";
+  analytics_profile: "traffic" | "people" | "matriculas" | "streaming";
   probe_status: "untested" | "ok" | "failed";
   last_probe_at: string | null;
   probe_details: CameraProbe | null;
@@ -83,6 +83,8 @@ export interface KpiRow {
 export interface OccupancyStats {
   timestamp: string | null;
   count: number | null;
+  standing: number | null;
+  moving: number | null;
   by_class: Record<string, number> | null;
   unique_total: number | null;
   avg_dwell_s: number | null;
@@ -121,6 +123,7 @@ export interface DetectionsPayload {
 }
 
 export interface RoiConfig {
+  alpr_zone?: { x1: number; y1: number; x2: number; y2: number } | null;
   lines?: RoiLine[];
   polygons?: RoiPolygon[];
   homography?: { src_points: [number, number][]; dst_points: [number, number][] } | null;
@@ -151,12 +154,64 @@ export interface EventFilters {
   pending_only?: boolean;
 }
 
+export interface AlprConfig {
+  provider?: string;
+  api_url?: string;
+  api_key?: string;
+  include_owner?: boolean;
+  cameras?: string;
+  username?: string;
+  license_key?: string;
+  endpoint?: string;
+  operation?: string;
+  ar_api_key?: string;
+  query_det_conf?: number;
+  query_ocr_conf?: number;
+  validate_plate?: boolean;
+  region?: string;
+}
+
+export interface AlprDetection {
+  plate: string;
+  raw_text: string;
+  detector_confidence: number;
+  ocr_confidence: number;
+  region: string | null;
+  box: [number, number, number, number];
+}
+
+export interface AlprCamera {
+  camera_id: string;
+  source: string;
+  status: string;
+  error: string | null;
+  last_frame_at: number | null;
+  last_frame_age_s: number | null;
+  frame_seq: number;
+  inference_count: number;
+  dropped_frames: number;
+  inference_ms: number | null;
+  detections: AlprDetection[];
+}
+
 const TOKEN_KEY = "sauron_token";
 
 export const auth = {
   token: () => localStorage.getItem(TOKEN_KEY),
-  set: (t: string) => localStorage.setItem(TOKEN_KEY, t),
-  clear: () => localStorage.removeItem(TOKEN_KEY),
+  set: (t: string) => {
+    localStorage.setItem(TOKEN_KEY, t);
+    document.cookie = `${TOKEN_KEY}=${t}; path=/; SameSite=Strict`;
+  },
+  clear: () => {
+    localStorage.removeItem(TOKEN_KEY);
+    document.cookie = `${TOKEN_KEY}=; path=/; Max-Age=0; SameSite=Strict`;
+  },
+  ensureCookie: () => {
+    const t = localStorage.getItem(TOKEN_KEY);
+    if (t && !document.cookie.includes(`${TOKEN_KEY}=`)) {
+      document.cookie = `${TOKEN_KEY}=${t}; path=/; SameSite=Strict`;
+    }
+  },
 };
 
 const BASE = import.meta.env.VITE_API_BASE ?? "";
@@ -328,8 +383,17 @@ export const api = {
         created_at: string;
       }[]
     >("/api/v1/notification-deliveries?limit=100"),
+  alprConfig: () => apiFetch<AlprConfig>("/api/v1/alpr-config"),
+  saveAlprConfig: (cfg: AlprConfig) =>
+    apiFetch<{ saved: number }>("/api/v1/alpr-config", {
+      method: "PUT",
+      body: JSON.stringify(cfg),
+    }),
+  alprHealth: () =>
+    apiFetch<{ status: string; vehicle_lookups?: Record<string, number> }>("/alpr/healthz"),
   occupancy: (cameraId: string) =>
     apiFetch<OccupancyStats>(`/api/v1/cameras/${cameraId}/occupancy`),
+  alprCameras: () => apiFetch<AlprCamera[]>("/alpr/api/cameras"),
   detections: (cameraId: string) =>
     apiFetch<DetectionsPayload>(`/api/v1/cameras/${cameraId}/detections`),
   kpis: (cameraId: string | null, since: Date, until: Date, bucket: string) => {

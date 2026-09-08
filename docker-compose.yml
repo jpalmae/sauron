@@ -28,11 +28,6 @@ services:
       SAURON_DS_RECOVERY_ATTEMPTS: "3"
       SAURON_DS_SOURCE_REST_PORT: "9010"
       SAURON_DS_HEALTH_PORT: "9100"
-      SAURON_DS_EVIDENCE_ENABLED: ${EVIDENCE_ENABLED:-true}
-      SAURON_DS_EVIDENCE_DIR: /var/lib/sauron/evidence
-      SAURON_DS_EVIDENCE_PRE_S: ${EVIDENCE_PRE_SECONDS:-5}
-      SAURON_DS_EVIDENCE_POST_S: ${EVIDENCE_POST_SECONDS:-10}
-      SAURON_DS_EVIDENCE_RETENTION_S: ${EVIDENCE_RETENTION_SECONDS:-120}
     deploy:
       resources:
         reservations:
@@ -46,7 +41,6 @@ services:
               capabilities: [gpu]
     volumes:
       - deepstream-engines:/models
-      - deepstream-evidence:/var/lib/sauron/evidence
     ports:
       - "9100:9100" # prometheus metrics + healthz
     healthcheck:
@@ -105,11 +99,16 @@ services:
       dockerfile: deploy/docker/web.Dockerfile
     image: sauron/web:0.1.0
     restart: unless-stopped
+    environment:
+      # base64 de usuario:contraseña del servicio ALPR para el proxy /alpr/
+      ALPR_BASIC_TOKEN: ${ALPR_BASIC_TOKEN:-}
     ports:
       - "${WEB_PORT:-8080}:80"
+      - "8092:80" # pool separado para streams MJPEG de Matrículas
     volumes:
       # white-label: drop client logos/favicon here, no rebuild needed
       - ./brand:/usr/share/nginx/html/brand:ro
+      - ./deploy/docker/nginx.conf:/etc/nginx/templates/default.conf.template:ro
     depends_on:
       - api
 
@@ -123,6 +122,64 @@ services:
       - "8554:8554"   # RTSP
       - "8555:8555"
       - "8555:8555/udp"
+
+  alpr:
+    build:
+      context: .
+      dockerfile: deploy/docker/alpr.Dockerfile
+    image: sauron/alpr:0.1.0
+    profiles: ["alpr"]
+    restart: unless-stopped
+    environment:
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+      SAURON_ALPR_DEVICE: cuda
+      SAURON_ALPR_GO2RTC_URL: http://go2rtc:1984
+      SAURON_ALPR_API_URL: http://api:8000/api/v1
+      SAURON_ALPR_INGEST_TOKEN: ${INGEST_TOKEN}
+      SAURON_ALPR_USER: ${ADMIN_EMAIL:-admin@sauron.local}
+      SAURON_ALPR_PASSWORD: ${ADMIN_PASSWORD}
+      SAURON_ALPR_STREAMS: ${ALPR_STREAMS:-cam-10,cam-166=cam-166-hd,cam-196,cam-212,cam-39=cam-39-hd,cam-75,caltrans-i5-43rd=public-i5-43rd,caltrans-us50-howe=public-us50-howe}
+      SAURON_ALPR_TARGET_FPS: ${ALPR_TARGET_FPS:-2}
+      SAURON_ALPR_STALE_AFTER_S: ${ALPR_STALE_AFTER_S:-30}
+      SAURON_ALPR_VEHICLE_API_URL: ${ALPR_VEHICLE_API_URL:-https://api.boostr.cl/vehicle/{plate}.json}
+      SAURON_ALPR_VEHICLE_API_KEY: ${ALPR_VEHICLE_API_KEY:-}
+      SAURON_ALPR_VEHICLE_INCLUDE_OWNER: ${ALPR_VEHICLE_INCLUDE_OWNER:-false}
+      SAURON_ALPR_VEHICLE_PROVIDER: ${ALPR_VEHICLE_PROVIDER:-}
+      SAURON_ALPR_VEHICLE_CAMERAS: ${ALPR_VEHICLE_CAMERAS:-}
+      SAURON_ALPR_VALIDATE_PLATE: ${ALPR_VALIDATE_PLATE:-false}
+      SAURON_ALPR_QUERY_DET_CONF: ${ALPR_QUERY_DET_CONF:-1.0}
+      SAURON_ALPR_QUERY_OCR_CONF: ${ALPR_QUERY_OCR_CONF:-1.0}
+      SAURON_ALPR_MATRICULA_USERNAME: ${ALPR_MATRICULA_USERNAME:-}
+      SAURON_ALPR_MATRICULA_KEY: ${ALPR_MATRICULA_KEY:-}
+      SAURON_ALPR_MATRICULA_ENDPOINT: ${ALPR_MATRICULA_ENDPOINT:-https://www.regcheck.org.uk/api/reg.asmx}
+      SAURON_ALPR_MATRICULA_OPERATION: ${ALPR_MATRICULA_OPERATION:-CheckChile}
+      SAURON_ALPR_REGION: ${ALPR_REGION:-}
+      SAURON_ALPR_BESTSHOT_WAIT_S: ${ALPR_BESTSHOT_WAIT_S:-4}
+      SAURON_ALPR_BESTSHOT_CONF: ${ALPR_BESTSHOT_CONF:-0.95}
+      SAURON_ALPR_DETECTOR_CONFIDENCE: ${ALPR_DETECTOR_CONFIDENCE:-0.25}
+      SAURON_ALPR_OCR_CONFIDENCE: ${ALPR_OCR_CONFIDENCE:-0.65}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["${ALPR_GPU_DEVICE:-0}"]
+              capabilities: [gpu]
+    volumes:
+      - alpr-models:/root/.cache
+    ports:
+      - "${ALPR_PORT:-8091}:8091"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8091/healthz')"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 5m
+    depends_on:
+      api:
+        condition: service_healthy
+      go2rtc:
+        condition: service_started
 
   # Optional RTSP -> WebRTC gateway for the live grid (WHEP players).
   # Add each camera as a path in mediamtx.yml and enable with:
@@ -218,5 +275,5 @@ volumes:
   redis-data:
   minio-data:
   deepstream-engines:
-  deepstream-evidence:
+  alpr-models:
   prometheus-data:

@@ -1,4 +1,4 @@
-import { Download, Grid2x2 } from "lucide-react";
+import { Download, Grid2x2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
   api,
@@ -17,7 +17,52 @@ import { filterEventsByDomain, type Domain } from "../lib/domain";
 
 const TRAFFIC_TYPES = ["LINE_CROSSING", "STOPPED_VEHICLE", "OBSTRUCTION", "WRONG_WAY", "CONGESTION", "ALPR", "ALPR_WATCHLIST", "TRAVEL_TIME", "CAMERA_OFFLINE", "CAMERA_ONLINE", "AUDIO_ANOMALY"];
 const PEOPLE_TYPES = ["OCCUPANCY", "CHAIR_OCCUPANCY", "GROUPING", "FALL"];
+const MATRICULAS_TYPES = ["ALPR", "ALPR_WATCHLIST"];
 const EVENT_TYPES = [...TRAFFIC_TYPES, ...PEOPLE_TYPES];
+
+interface VehicleInfo {
+  plate?: string;
+  dv?: string;
+  make?: string;
+  model?: string;
+  year?: number;
+  type?: string;
+  engine?: string;
+  vin?: string;
+  color?: string;
+  fuel?: string;
+  provider?: string;
+  owner?: { fullname?: string; documentNumber?: string };
+}
+
+function VehicleBox({ vehicle }: { vehicle: VehicleInfo }) {
+  const title = [vehicle.make, vehicle.model].filter(Boolean).join(" ");
+  return (
+    <div className="rounded-lg border border-info/30 bg-info/5 p-3">
+      <div className="flex items-center justify-between font-mono text-[10px] uppercase tracking-wider text-info">
+        <span>Vehículo · Registro Civil</span>
+        {vehicle.provider === "demo" && (
+          <span className="rounded bg-amber-300/10 px-1.5 py-0.5 text-amber-300">datos demo</span>
+        )}
+      </div>
+      <div className="mt-1 text-sm font-semibold text-ink">
+        {title || "—"}
+        {vehicle.year ? <span className="ml-1.5 font-normal text-mut">{vehicle.year}</span> : null}
+      </div>
+      <div className="mt-0.5 font-mono text-[11px] text-mut">
+        {[vehicle.type, vehicle.color, vehicle.fuel, vehicle.vin ? `VIN ${vehicle.vin}` : ""]
+          .filter(Boolean)
+          .join(" · ")}
+      </div>
+      {vehicle.owner?.fullname && (
+        <div className="mt-1 font-mono text-[11px] text-mut">
+          propietario: {vehicle.owner.fullname}
+          {vehicle.owner.documentNumber ? ` · ${vehicle.owner.documentNumber}` : ""}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function Evidence({
   event,
@@ -28,14 +73,55 @@ function Evidence({
   onAck: (id: string) => void;
   onFeedback: (id: string, value: "correct" | "false_positive") => void;
 }) {
+  const [zoom, setZoom] = useState(false);
+
+  useEffect(() => {
+    if (!zoom) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        setZoom(false);
+      }
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [zoom]);
+
   return (
     <div className="space-y-2">
       {event.clip_url ? (
         <video src={event.clip_url} controls preload="metadata" className="w-full rounded border border-line" />
       ) : event.snapshot_url ? (
-        <img src={event.snapshot_url} alt="evidencia" className="w-full rounded border border-line object-cover" />
+        <img
+          src={event.snapshot_url}
+          alt="evidencia"
+          onClick={() => setZoom(true)}
+          className="w-full cursor-zoom-in rounded border border-line object-cover"
+        />
       ) : (
         <span className="font-mono text-[11px] text-dim">sin evidencia</span>
+      )}
+      {event.metadata?.vehicle ? (
+        <VehicleBox vehicle={event.metadata.vehicle as VehicleInfo} />
+      ) : null}
+      {zoom && event.snapshot_url && (
+        <div
+          className="fixed inset-0 z-[60] flex cursor-zoom-out items-center justify-center bg-black/95 p-4"
+          onClick={() => setZoom(false)}
+        >
+          <img
+            src={event.snapshot_url}
+            alt="evidencia ampliada"
+            className="max-h-full max-w-full object-contain"
+          />
+          <button
+            onClick={() => setZoom(false)}
+            className="absolute right-5 top-5 rounded-md border border-white/20 bg-black/60 p-2 text-white/80 hover:text-white"
+            aria-label="cerrar zoom"
+          >
+            <X size={18} />
+          </button>
+        </div>
       )}
       {event.acknowledged_at ? (
         <p className="font-mono text-[11px] text-info">
@@ -112,14 +198,23 @@ export default function EventsPage({ domain }: { domain?: Domain }) {
     api.setFeedback(eventId, value).catch(console.error);
   };
 
-  const visibleTypes = domain === "traffic" ? TRAFFIC_TYPES : domain === "people" ? PEOPLE_TYPES : EVENT_TYPES;
+  const visibleTypes =
+    domain === "traffic"
+      ? TRAFFIC_TYPES
+      : domain === "people"
+        ? PEOPLE_TYPES
+        : domain === "matriculas"
+          ? MATRICULAS_TYPES
+          : EVENT_TYPES;
   const displayItems = domain && data ? filterEventsByDomain(data.items, domain) : data?.items;
 
   return (
     <div className="space-y-4 p-5">
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="font-display text-xl font-semibold">
-          Eventos{domain ? ` · ${domain === "traffic" ? "Tráfico" : "Personas"}` : ""}
+          Eventos{domain
+            ? ` · ${domain === "traffic" ? "Tráfico" : domain === "people" ? "Personas" : "Matrículas"}`
+            : ""}
         </h1>
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <select

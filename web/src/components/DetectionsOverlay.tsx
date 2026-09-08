@@ -20,9 +20,12 @@ export type AnalyticsState = "connecting" | "live" | "stale" | "unavailable";
 export default function DetectionsOverlay({
   cameraId,
   onState,
+  profile,
 }: {
   cameraId: string;
   onState?: (state: AnalyticsState) => void;
+  /** people: solo dibuja personas (evita ruido de clases irrelevantes en interiores) */
+  profile?: string;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -44,6 +47,7 @@ export default function DetectionsOverlay({
       if (!d?.objects?.length) return;
 
       for (const o of d.objects) {
+        if (profile === "people" && o.class && o.class.toLowerCase() !== "person") continue;
         const [nx1, ny1, nx2, ny2] = o.box;
         const x = nx1 * w, y = ny1 * h, bw = (nx2 - nx1) * w, bh = (ny2 - ny1) * h;
         const color = POSTURE_COLOR[o.posture ?? "unknown"] ?? "#eab308";

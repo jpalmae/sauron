@@ -2,7 +2,12 @@ from types import SimpleNamespace
 
 import pytest
 
-from sauron_deepstream.analytics import Detection, TrackAssembler, _classifier_label
+from sauron_deepstream.analytics import (
+    Detection,
+    MetadataProcessor,
+    TrackAssembler,
+    _classifier_label,
+)
 
 
 def _object(object_id=42, left=10, top=20, width=30, height=40):
@@ -33,6 +38,12 @@ def test_track_assembler_builds_history_and_time_normalized_velocity():
 def test_untracked_objects_are_ignored():
     assembler = TrackAssembler(["person"], fps=10)
     assert assembler.assemble("cam", 1, 1.0, [_object(object_id=0xFFFFFFFFFFFFFFFF)]) == []
+
+
+def test_metadata_processor_forwards_allowed_classes():
+    processor = MetadataProcessor(None, None, None, ["person"], 10, allowed_classes={"person"})
+
+    assert processor._tracks._allowed == {"person"}
 
 
 def test_reads_vehicle_type_from_secondary_classifier():
