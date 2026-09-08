@@ -65,6 +65,9 @@ class Settings:
     vehicle_include_owner: bool
     vehicle_provider: str
     vehicle_cameras: str
+    validate_plate: bool
+    query_det_conf: float
+    query_ocr_conf: float
     matricula_username: str
     matricula_key: str
     matricula_endpoint: str
@@ -114,6 +117,9 @@ class Settings:
             vehicle_include_owner=_bool_env("SAURON_ALPR_VEHICLE_INCLUDE_OWNER", False),
             vehicle_provider=os.getenv("SAURON_ALPR_VEHICLE_PROVIDER", "").strip().lower(),
             vehicle_cameras=os.getenv("SAURON_ALPR_VEHICLE_CAMERAS", "").strip(),
+            validate_plate=_bool_env("SAURON_ALPR_VALIDATE_PLATE", False),
+            query_det_conf=_float_env("SAURON_ALPR_QUERY_DET_CONF", 1.0, 0.0),
+            query_ocr_conf=_float_env("SAURON_ALPR_QUERY_OCR_CONF", 1.0, 0.0),
             matricula_username=os.getenv("SAURON_ALPR_MATRICULA_USERNAME", "").strip(),
             matricula_key=os.getenv("SAURON_ALPR_MATRICULA_KEY", "").strip(),
             matricula_endpoint=os.getenv(

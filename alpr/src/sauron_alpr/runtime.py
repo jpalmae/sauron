@@ -175,6 +175,7 @@ class ALPRRuntime:
         self._vehicle_cache: dict[str, tuple[float, dict[str, Any] | None]] = {}
         self._vehicle_cache_lock = threading.Lock()
         self._emit_queue: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=16)
+        self._lookup_stats: dict[str, int] = {"attempts": 0, "ok": 0, "empty": 0, "timeout": 0}
         self._capture_events: dict[str, threading.Event] = {}
         self._capture_threads: dict[str, threading.Thread] = {}
         self._api_added: set[str] = set()
@@ -207,29 +208,7 @@ class ALPRRuntime:
         self._event_client = httpx.Client(timeout=10)
         if self.settings.vehicle_provider == "demo":
             log.info("vehicle lookup enabled in DEMO mode (datos sintéticos locales)")
-        elif self.settings.vehicle_provider == "matriculaapi":
-            if self.settings.matricula_username and self.settings.matricula_key:
-                # Las consultas en frío a SRCEI pueden tardar >20 s.
-                self._soap_client = httpx.Client(timeout=30)
-                log.info(
-                    "vehicle lookup enabled via matriculaapi (%s) — solo se envía la patente; "
-                    "cámaras: %s",
-                    self.settings.matricula_endpoint,
-                    self.settings.vehicle_cameras or "todas",
-                )
-            else:
-                log.warning(
-                    "vehicle_provider=matriculaapi sin credenciales; lookup desactivado"
-                )
-        elif self.settings.vehicle_api_key:
-            self._vehicle_client = httpx.Client(
-                timeout=3,
-                headers={
-                    "X-API-KEY": self.settings.vehicle_api_key,
-                    "accept": "application/json",
-                },
-            )
-            log.info("vehicle lookup enabled via %s", self.settings.vehicle_api_url)
+        self._ensure_vehicle_clients()
         os.environ.setdefault("OPENCV_FFMPEG_CAPTURE_OPTIONS", "rtsp_transport;tcp")
         inference = threading.Thread(target=self._inference_loop, name="alpr-inference", daemon=True)
         self._threads.append(inference)
@@ -277,12 +256,68 @@ class ALPRRuntime:
         for key in stale:
             self._last_event.pop(key, None)
 
+    def _ensure_vehicle_clients(self) -> None:
+        provider = self.settings.vehicle_provider
+        if provider == "boostr" and self.settings.vehicle_api_key:
+            if self._vehicle_client is None:
+                self._vehicle_client = httpx.Client(
+                    timeout=10,
+                    headers={
+                        "X-API-KEY": self.settings.vehicle_api_key,
+                        "accept": "application/json",
+                    },
+                )
+        elif (
+            provider == "matriculaapi"
+            and self.settings.matricula_username
+            and self.settings.matricula_key
+            and self._soap_client is None
+        ):
+            # Las consultas en frío a SRCEI pueden tardar >20 s.
+            self._soap_client = httpx.Client(timeout=30)
+
+    def _apply_runtime_config(self, cfg: dict[str, Any]) -> None:
+        mapping = {
+            "provider": "vehicle_provider",
+            "api_url": "vehicle_api_url",
+            "api_key": "vehicle_api_key",
+            "include_owner": "vehicle_include_owner",
+            "cameras": "vehicle_cameras",
+            "username": "matricula_username",
+            "license_key": "matricula_key",
+            "endpoint": "matricula_endpoint",
+            "operation": "matricula_operation",
+            "query_det_conf": "query_det_conf",
+            "query_ocr_conf": "query_ocr_conf",
+            "validate_plate": "validate_plate",
+            "region": "region",
+        }
+        applied = []
+        for key, attr in mapping.items():
+            if key in cfg:
+                value = cfg[key]
+                if isinstance(value, str):
+                    value = value.strip()
+                object.__setattr__(self.settings, attr, value)
+                applied.append(attr)
+        if applied:
+            self._ensure_vehicle_clients()
+            log.info("config API aplicada: %s", ", ".join(sorted(applied)))
+
     def _reconcile_loop(self) -> None:
         client = httpx.Client(
             timeout=10,
             headers={"Authorization": f"Bearer {self.settings.ingest_token}"},
         )
         while not self._stop.is_set():
+            try:
+                cfg_response = client.get(f"{self.settings.api_url}/alpr-config")
+                cfg_response.raise_for_status()
+                cfg = cfg_response.json()
+                if isinstance(cfg, dict) and cfg:
+                    self._apply_runtime_config(cfg)
+            except (httpx.HTTPError, ValueError, TypeError):
+                pass  # la config dinámica es opcional
             try:
                 response = client.get(f"{self.settings.api_url}/cameras/active")
                 response.raise_for_status()
@@ -374,6 +409,7 @@ class ALPRRuntime:
         return {
             "status": status,
             "ready": self.model_ready,
+            "vehicle_lookups": dict(self._lookup_stats),
             "model": {
                 "detector": self.settings.detector_model,
                 "ocr": self.settings.ocr_model,
@@ -596,11 +632,23 @@ class ALPRRuntime:
         allowed = {
             x.strip() for x in self.settings.vehicle_cameras.split(",") if x.strip()
         }
+        provider = self.settings.vehicle_provider
+        gate = self.settings.validate_plate and provider in ("boostr", "matriculaapi")
+        # Consultar solo cuando YOLO y OCR dan el máximo: ahorra créditos.
+        certain = (
+            detection["ocr_confidence"] >= self.settings.query_ocr_conf
+            and detection["detector_confidence"] >= self.settings.query_det_conf
+        )
         vehicle = None
-        if not allowed or camera_id in allowed:
+        if (not allowed or camera_id in allowed) and certain:
             vehicle = self._vehicle_data(plate)
         if vehicle:
             metadata["vehicle"] = vehicle
+        elif gate:
+            # Regla: solo entran a eventos las placas confirmadas por la
+            # fuente oficial (Registro Civil) — el OCR solo no basta.
+            log.info("lectura %s no validada por Registro Civil; evento descartado", plate)
+            return
         if self.settings.region:
             # El OCR global adivina la región por píxeles y suele errar; el
             # despliegue tiene una región conocida y esa manda.
@@ -645,7 +693,9 @@ class ALPRRuntime:
                 cached = self._vehicle_cache.get(plate)
                 if cached and cached[0] > now:
                     return cached[1]
+            self._lookup_stats["attempts"] += 1
             data, timed_out = self._fetch_vehicle_soap(plate)
+            self._lookup_stats["ok" if data else ("timeout" if timed_out else "empty")] += 1
             # SRCEI indexa patentes nuevas de forma asíncrona (>60 s la
             # primera vez): reintenta pronto en vez de castigar por 1 h.
             ttl = 7 * 86400 if data else (300 if timed_out else 3600)

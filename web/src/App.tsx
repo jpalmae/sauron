@@ -4,6 +4,7 @@ import Layout from "./components/Layout";
 import { auth } from "./lib/api";
 import { useBranding } from "./lib/branding";
 import AlprPage from "./pages/AlprPage";
+import ConfigApiPage from "./pages/ConfigApiPage";
 import AnalyticsPage from "./pages/AnalyticsPage";
 import CamerasPage from "./pages/CamerasPage";
 import Dashboard from "./pages/Dashboard";
@@ -52,6 +53,7 @@ export default function App() {
           <Route path="cameras/:id/roi" element={<RoiConfiguratorPage />} />
           <Route path="alpr" element={<AlprPage />} />
           <Route path="alpr/eventos" element={<EventsPage domain="matriculas" />} />
+          <Route path="alpr/config" element={<ConfigApiPage />} />
         </Route>
       </Routes>
     </Router>

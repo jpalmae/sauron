@@ -154,6 +154,22 @@ export interface EventFilters {
   pending_only?: boolean;
 }
 
+export interface AlprConfig {
+  provider?: string;
+  api_url?: string;
+  api_key?: string;
+  include_owner?: boolean;
+  cameras?: string;
+  username?: string;
+  license_key?: string;
+  endpoint?: string;
+  operation?: string;
+  query_det_conf?: number;
+  query_ocr_conf?: number;
+  validate_plate?: boolean;
+  region?: string;
+}
+
 export interface AlprDetection {
   plate: string;
   raw_text: string;
@@ -366,6 +382,14 @@ export const api = {
         created_at: string;
       }[]
     >("/api/v1/notification-deliveries?limit=100"),
+  alprConfig: () => apiFetch<AlprConfig>("/api/v1/alpr-config"),
+  saveAlprConfig: (cfg: AlprConfig) =>
+    apiFetch<{ saved: number }>("/api/v1/alpr-config", {
+      method: "PUT",
+      body: JSON.stringify(cfg),
+    }),
+  alprHealth: () =>
+    apiFetch<{ status: string; vehicle_lookups?: Record<string, number> }>("/alpr/healthz"),
   occupancy: (cameraId: string) =>
     apiFetch<OccupancyStats>(`/api/v1/cameras/${cameraId}/occupancy`),
   alprCameras: () => apiFetch<AlprCamera[]>("/alpr/api/cameras"),
