@@ -55,13 +55,13 @@ export default function MapPage() {
           {filteredLocated.length}/{cameras.length} visibles
         </span>
         <div className="ml-auto flex overflow-hidden rounded-md border border-line">
-          {([null, "traffic", "people"] as const).map((d) => (
+          {([null, "traffic", "people", "matriculas", "streaming"] as const).map((d) => (
             <button
               key={String(d)}
               onClick={() => setDomainFilter(d)}
               className={`px-3 py-1 text-xs ${domainFilter === d ? "bg-raised text-ink" : "text-mut hover:text-ink"}`}
             >
-              {d === null ? "Todo" : d === "traffic" ? "Tráfico" : "Personas"}
+              {d === null ? "Todo" : d === "traffic" ? "Tráfico" : d === "people" ? "Personas" : d === "matriculas" ? "Matrículas" : "Streaming"}
             </button>
           ))}
         </div>

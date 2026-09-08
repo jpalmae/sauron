@@ -11,6 +11,20 @@ env:
   IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}/sauron
 
 jobs:
+  alpr:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: alpr
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - run: uv venv && uv pip install -e ".[dev]" --python .venv/bin/python
+      - run: .venv/bin/ruff check src tests
+      - run: .venv/bin/python -m pytest -q
+
   deepstream:
     runs-on: ubuntu-latest
     defaults:

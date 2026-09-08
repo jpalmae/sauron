@@ -157,7 +157,10 @@ class SourceController:
             self._stale_seconds,
             self._recovery_attempts,
         )
-        if failed and not self._restart_requested:
+        active_ids = set(self._active)
+        # A permanently unavailable camera must not interrupt healthy sources.
+        pipeline_failed = bool(active_ids) and active_ids.issubset(failed)
+        if pipeline_failed and not self._restart_requested:
             self._restart_requested = True
             log.critical(
                 "source recovery budget exhausted for %s; restarting DeepStream process",
