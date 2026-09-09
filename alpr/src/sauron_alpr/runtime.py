@@ -617,7 +617,6 @@ class ALPRRuntime:
         key = (camera_id, plate)
         if timestamp - self._last_event.get(key, 0.0) < self.settings.event_cooldown_s:
             return
-        self._last_event[key] = timestamp
         metadata = {
             "plate_text": plate,
             "detector_confidence": detection["detector_confidence"],
@@ -641,11 +640,17 @@ class ALPRRuntime:
             vehicle = self._vehicle_data(plate)
         if vehicle:
             metadata["vehicle"] = vehicle
+            # Cooldown completo solo para eventos válidos
+            self._last_event[key] = timestamp
         elif gate:
             # Regla: solo entran a eventos las placas confirmadas por la
-            # fuente oficial (Registro Civil) — el OCR solo no basta.
-            log.info("lectura %s no validada por Registro Civil; evento descartado", plate)
+            # fuente oficial — el OCR solo no basta. Descartar arma un
+            # reintento breve: la lectura mejora al acercarse el vehículo.
+            self._last_event[key] = timestamp - self.settings.event_cooldown_s + 4.0
+            log.info("lectura %s no validada; reintento en 4 s", plate)
             return
+        else:
+            self._last_event[key] = timestamp
         if self.settings.region:
             # El OCR global adivina la región por píxeles y suele errar; el
             # despliegue tiene una región conocida y esa manda.
