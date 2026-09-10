@@ -8,7 +8,7 @@ import {
   Spline,
   Trash2,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import {
   api,
@@ -60,12 +60,22 @@ export default function RoiConfiguratorPage() {
     y2: number;
   } | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
+  const [liveUrl, setLiveUrl] = useState<string | null>(null);
+  const [liveMode, setLiveMode] = useState(true);
+  const handleLiveState = useCallback((ok: boolean) => {
+    if (!ok) setLiveUrl(null);
+  }, []);
 
   useEffect(() => {
     if (!id) return;
     api.cameras().then(async (cams) => {
       const cam = cams.find((c) => c.id === id) ?? null;
       setCamera(cam);
+      if (cam) {
+        api.liveUrl(cam.stream_id).then((s) => {
+          if (s.kind === "whep") setLiveUrl(s.url);
+        }).catch(() => {});
+      }
       const roi = cam?.roi_config;
       if (roi) {
         setPolygons(roi.polygons ?? []);
@@ -254,7 +264,9 @@ export default function RoiConfiguratorPage() {
         </div>
 
         <div className="relative min-h-0 flex-1 overflow-hidden rounded-lg border border-line bg-panel">
-          {imageUrl ? (
+          {liveMode && liveUrl ? (
+            <LiveVideo url={liveUrl} onState={handleLiveState} />
+          ) : imageUrl ? (
             <img
               src={imageUrl}
               alt="frame"
@@ -274,6 +286,12 @@ export default function RoiConfiguratorPage() {
               </p>
             </div>
           )}
+          <button
+            onClick={() => setLiveMode((v) => !v)}
+            className="absolute right-3 top-3 z-10 rounded-md border border-line bg-black/60 px-3 py-1.5 font-mono text-[11px] text-white backdrop-blur hover:bg-black/80"
+          >
+            {liveMode && liveUrl ? "usar imagen" : "ver en vivo"}
+          </button>
           <svg
             ref={svgRef}
             viewBox={`0 0 ${imgSize[0]} ${imgSize[1]}`}
@@ -608,4 +626,39 @@ function DirectionArrow({ from, dir }: { from: Pt; dir: Pt }) {
       </defs>
     </g>
   );
+}
+
+function LiveVideo({ url, onState }: { url: string; onState: (ok: boolean) => void }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  useEffect(() => {
+    const pc = new RTCPeerConnection();
+    let cancelled = false;
+    (async () => {
+      try {
+        pc.addTransceiver("video", { direction: "recvonly" });
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        const resp = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/sdp" },
+          body: offer.sdp,
+        });
+        if (!resp.ok) throw new Error(String(resp.status));
+        await pc.setRemoteDescription({ type: "answer", sdp: await resp.text() });
+      } catch {
+        if (!cancelled) onState(false);
+      }
+    })();
+    pc.ontrack = (e) => {
+      if (videoRef.current) videoRef.current.srcObject = e.streams[0];
+    };
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === "failed") onState(false);
+    };
+    return () => {
+      cancelled = true;
+      pc.close();
+    };
+  }, [url, onState]);
+  return <video ref={videoRef} autoPlay muted playsInline className="absolute inset-0 h-full w-full object-contain" />;
 }
