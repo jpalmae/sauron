@@ -149,7 +149,7 @@ export default function RoiConfiguratorPage() {
         setPolygons((ps) => ps.filter((_, i) => i !== pIdx));
         return;
       }
-      const lIdx = lines.findIndex((l) => hitTestLine(p, l, 12));
+      const lIdx = pickLineIdx(p);
       if (lIdx >= 0) setLines((ls) => ls.filter((_, i) => i !== lIdx));
     } else if (tool === "select") {
       const pIdx = polygons.findIndex((poly) => hitTestPolygon(p, poly));
@@ -157,9 +157,27 @@ export default function RoiConfiguratorPage() {
         setSelected({ type: "polygon", idx: pIdx });
         return;
       }
-      const lIdx = lines.findIndex((l) => hitTestLine(p, l, 12));
+      const lIdx = pickLineIdx(p);
       setSelected(lIdx >= 0 ? { type: "line", idx: lIdx } : null);
     }
+  };
+
+  const pickLineIdx = (p: Pt): number => {
+    const hits = lines
+      .map((l, i) => (hitTestLine(p, l, 12) ? i : -1))
+      .filter((i) => i >= 0);
+    if (hits.length === 0) return -1;
+    if (hits.length === 1) return hits[0];
+    if (selected?.type === "line") {
+      const pos = hits.indexOf(selected.idx);
+      if (pos >= 0 && pos < hits.length - 1) return hits[pos + 1];
+    }
+    return hits[0];
+  };
+
+  const removeLine = (i: number) => {
+    setLines((ls) => ls.filter((_, j) => j !== i));
+    setSelected((sel) => (sel?.type === "line" && sel.idx === i ? null : sel));
   };
 
   const closePolygonDraft = () => {
@@ -501,8 +519,15 @@ export default function RoiConfiguratorPage() {
                   className="w-24 rounded border border-line bg-base px-2 py-1 font-mono"
                 />
                 <span className="ml-2 font-mono text-[10px] text-mut">
-                  línea de conteo {line.direction ? "· con dirección" : ""}
+                  línea de conteo {line.direction ? "· con dirección" : ""} · {line.classes?.length ?? 0} clases
                 </span>
+                <button
+                  onClick={() => removeLine(i)}
+                  title="Eliminar línea"
+                  className="float-right rounded p-1 text-mut hover:bg-danger/10 hover:text-danger"
+                >
+                  <Trash2 size={13} />
+                </button>
               </div>
             ))}
             {polygons.length + lines.length === 0 && (
