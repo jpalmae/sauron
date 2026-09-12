@@ -9,7 +9,7 @@ services:
     profiles: ["gpu"] # requires nvidia-container-toolkit on the host
     restart: unless-stopped
     environment:
-      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_VISIBLE_DEVICES: GPU-bdd8d90e-0c61-c97f-1cbf-1f48cc722f9d
       NVIDIA_DRIVER_CAPABILITIES: compute,video,utility
       SAURON_REDIS_URL: redis://redis:6379/0
       SAURON_API_URL: http://api:8000
@@ -39,6 +39,11 @@ services:
               # some NVIDIA Container Toolkit versions, so nvmultiurisrcbin
               # cannot be created even though CUDA itself is available.
               capabilities: [gpu]
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
     volumes:
       - deepstream-engines:/models
     ports:

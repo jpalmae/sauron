@@ -283,7 +283,7 @@ export default function RoiConfiguratorPage() {
 
         <div className="relative min-h-0 flex-1 overflow-hidden rounded-lg border border-line bg-panel">
           {liveMode && liveUrl ? (
-            <LiveVideo url={liveUrl} onState={handleLiveState} />
+            <LiveVideo url={liveUrl} onState={handleLiveState} onSize={(w, h) => setImgSize([w, h])} />
           ) : imageUrl ? (
             <img
               src={imageUrl}
@@ -653,7 +653,7 @@ function DirectionArrow({ from, dir }: { from: Pt; dir: Pt }) {
   );
 }
 
-function LiveVideo({ url, onState }: { url: string; onState: (ok: boolean) => void }) {
+function LiveVideo({ url, onState, onSize }: { url: string; onState: (ok: boolean) => void; onSize: (w: number, h: number) => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   useEffect(() => {
     const pc = new RTCPeerConnection();
@@ -675,7 +675,13 @@ function LiveVideo({ url, onState }: { url: string; onState: (ok: boolean) => vo
       }
     })();
     pc.ontrack = (e) => {
-      if (videoRef.current) videoRef.current.srcObject = e.streams[0];
+      if (videoRef.current) {
+        videoRef.current.srcObject = e.streams[0];
+        videoRef.current.onloadedmetadata = () => {
+          const v = videoRef.current;
+          if (v && v.videoWidth) onSize(v.videoWidth, v.videoHeight);
+        };
+      }
     };
     pc.onconnectionstatechange = () => {
       if (pc.connectionState === "failed") onState(false);

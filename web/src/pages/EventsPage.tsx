@@ -9,6 +9,7 @@ import {
 } from "../lib/api";
 import {
   CLASS_LABELS,
+  DIRECTION_LABELS,
   EVENT_LABELS,
   SEVERITY_CLASSES,
   fmtDateTime,
@@ -318,7 +319,15 @@ export default function EventsPage({ domain }: { domain?: Domain }) {
                     {fmtDateTime(e.timestamp)}
                   </td>
                   <td className="px-4 py-2.5">{camName(e.camera_id)}</td>
-                  <td className="px-4 py-2.5">{EVENT_LABELS[e.event_type] ?? e.event_type}</td>
+                  <td className="px-4 py-2.5">
+                    {EVENT_LABELS[e.event_type] ?? e.event_type}
+                    {e.event_type === "LINE_CROSSING" && (
+                      <span className="ml-1 font-mono text-[10px] text-mut">
+                        {e.metadata?.line_id ? `· ${e.metadata.line_id}` : ""}
+                        {e.metadata?.direction ? ` · ${DIRECTION_LABELS[String(e.metadata.direction)] ?? e.metadata.direction}` : ""}
+                      </span>
+                    )}
+                  </td>
                   <td className="px-4 py-2.5">
                     <span
                       className={`rounded-full border px-2 py-0.5 font-mono text-[10px] ${SEVERITY_CLASSES[e.priority]}`}
