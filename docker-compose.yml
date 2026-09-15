@@ -10,10 +10,6 @@ services:
     restart: unless-stopped
     environment:
       NVIDIA_VISIBLE_DEVICES: GPU-bdd8d90e-0c61-c97f-1cbf-1f48cc722f9d
-      SAURON_DS_PGIE_TEMPLATE: /app/deepstream/configs/pgie_yolox.ini.tmpl
-      SAURON_DS_PRIMARY_MODEL: /models/tao/yolox_s_dyn.onnx
-      SAURON_DS_PRIMARY_LABELS: /models/tao/yolox_labels.txt
-      SAURON_DS_ALLOWED_CLASSES: person,bicycle,car,motorcycle,bus,truck,dog
       NVIDIA_DRIVER_CAPABILITIES: compute,video,utility
       SAURON_REDIS_URL: redis://redis:6379/0
       SAURON_API_URL: http://api:8000
