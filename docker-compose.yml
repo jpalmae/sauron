@@ -10,6 +10,7 @@ services:
     restart: unless-stopped
     environment:
       NVIDIA_VISIBLE_DEVICES: GPU-bdd8d90e-0c61-c97f-1cbf-1f48cc722f9d
+      SAURON_DS_TRACKER_CONFIG: /models/Tracker/config_tracker_accuracy.yml
       NVIDIA_DRIVER_CAPABILITIES: compute,video,utility
       SAURON_REDIS_URL: redis://redis:6379/0
       SAURON_API_URL: http://api:8000
