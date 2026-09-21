@@ -45,7 +45,7 @@ export default function DetectionsOverlay({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dataRef = useRef<DetectionsPayload | null>(null);
   const velRef = useRef<Map<string, VelState>>(new Map());
-  const renderRef = useRef<Map<string, { x: number; y: number }>>(new Map());
+  const renderRef = useRef<Map<string, { x: number; y: number; w: number; h: number; trail: { x: number; y: number }[] }>>(new Map());
 
   useEffect(() => {
     let alive = true;
@@ -125,6 +125,12 @@ export default function DetectionsOverlay({
           ny1 += cy - (ny1 + ny2) / 2;
           ny2 += cy - (ny1 + ny2) / 2;
         }
+        // tamano suavizado (EMA 0.3): reduce el parpadeo del box
+        const rp0 = renderRef.current.get(key);
+        const nw = rp0 ? rp0.w * 0.7 + (nx2 - nx1) * 0.3 : nx2 - nx1;
+        const nh = rp0 ? rp0.h * 0.7 + (ny2 - ny1) * 0.3 : ny2 - ny1;
+        nx2 = nx1 + nw;
+        ny2 = ny1 + nh;
         // persecucion suavizada del render: el recuadro dibujado persigue
         // la proyeccion a CHASE_RATE por segundo (movimiento fluido a 60fps)
         const rp = renderRef.current.get(key);
@@ -134,12 +140,22 @@ export default function DetectionsOverlay({
           const dcy = (ny1 + ny2) / 2 - rp.y;
           rp.x += dcx * k;
           rp.y += dcy * k;
-          nx1 += rp.x - (nx1 + nx2) / 2;
-          nx2 += rp.x - (nx1 + nx2) / 2;
-          ny1 += rp.y - (ny1 + ny2) / 2;
-          ny2 += rp.y - (ny1 + ny2) / 2;
+          rp.w = nw; rp.h = nh;
+          nx1 = rp.x - nw / 2;
+          nx2 = rp.x + nw / 2;
+          ny1 = rp.y - nh / 2;
+          ny2 = rp.y + nh / 2;
+          rp.trail.push({ x: rp.x, y: rp.y });
+          if (rp.trail.length > 8) rp.trail.shift();
+          for (let ti = 0; ti < rp.trail.length; ti++) {
+            const p = rp.trail[ti];
+            ctx.fillStyle = "rgba(234,179,8," + (0.12 + 0.5 * (ti / rp.trail.length)) + ")";
+            ctx.beginPath();
+            ctx.arc(p.x * w, p.y * h, 3, 0, Math.PI * 2);
+            ctx.fill();
+          }
         } else {
-          renderRef.current.set(key, { x: (nx1 + nx2) / 2, y: (ny1 + ny2) / 2 });
+          renderRef.current.set(key, { x: (nx1 + nx2) / 2, y: (ny1 + ny2) / 2, w: nx2 - nx1, h: ny2 - ny1, trail: [] });
         }
         const x = nx1 * w, y = ny1 * h, bw = (nx2 - nx1) * w, bh = (ny2 - ny1) * h;
         const color = POSTURE_COLOR[o.posture ?? "unknown"] ?? "#eab308";
