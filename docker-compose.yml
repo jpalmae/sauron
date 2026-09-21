@@ -276,9 +276,46 @@ services:
         mc mb --ignore-existing "local/$${EVENTS_BUCKET}"
         mc anonymous set download "local/$${EVENTS_BUCKET}/public"
 
+  relate:
+    build:
+      context: .
+      dockerfile: deploy/docker/relate.Dockerfile
+    image: sauron/relate:0.1.0
+    restart: unless-stopped
+    environment:
+      NVIDIA_VISIBLE_DEVICES: GPU-c07538bc-30f4-cf72-3a5d-c63010501522
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+      SAURON_REDIS_URL: redis://redis:6379/0
+      SAURON_API_URL: http://api:8000/api/v1
+      SAURON_INGEST_TOKEN: ${INGEST_TOKEN}
+      SAURON_RELATE_CAMERAS: cam-119
+      SAURON_RELATE_DEVICE: cuda
+    depends_on:
+      api:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: [gpu]
+    volumes:
+      - relate-models:/root/.cache
+    ports:
+      - "8093:8093"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8093/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 12
+      start_period: 10m
+
 volumes:
   timescale-data:
   redis-data:
+  relate-models:
   minio-data:
   deepstream-engines:
   alpr-models:

@@ -24,6 +24,7 @@ export const DIRECTION_LABELS: Record<string, string> = {
 
 export const EVENT_LABELS: Record<string, string> = {
   LINE_CROSSING: "Cruce de línea",
+  RELATION: "Relación",
   STOPPED_VEHICLE: "Vehículo detenido",
   OBSTRUCTION: "Obstrucción",
   WRONG_WAY: "Sentido contrario",
