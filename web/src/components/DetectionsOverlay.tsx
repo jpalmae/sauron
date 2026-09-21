@@ -21,6 +21,12 @@ export type AnalyticsState = "connecting" | "live" | "stale" | "unavailable";
 // por velocidad muerta (dead reckoning) a 60 fps, dibujandolo donde el objeto
 // esta AHORA en el video en vez de donde estaba cuando se proceso el frame.
 const DR_HORIZON_S = 2.5; // no extrapolar mas alla de 2.5 s sin datos frescos
+// Latencia del reproductor de video (WHEP) respecto al tiempo real: los
+// recuadros se dibujan en la posicion estimada para ese instante del video.
+const VIDEO_LATENCY_S = 0.45;
+// Suavizado del render: velocidad con la que el recuadro persigue su
+// posicion proyectada (por segundo). Mayor = sigue mas rapido.
+const CHASE_RATE = 10;
 
 type VelState = { x: number; y: number; t: number; vx: number; vy: number };
 
@@ -37,6 +43,7 @@ export default function DetectionsOverlay({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dataRef = useRef<DetectionsPayload | null>(null);
   const velRef = useRef<Map<string, VelState>>(new Map());
+  const renderRef = useRef<Map<string, { x: number; y: number }>>(new Map());
 
   useEffect(() => {
     let alive = true;
@@ -72,6 +79,9 @@ export default function DetectionsOverlay({
       for (const k of velRef.current.keys()) {
         if (!seen.has(k)) velRef.current.delete(k);
       }
+      for (const k of renderRef.current.keys()) {
+        if (!seen.has(k)) renderRef.current.delete(k);
+      }
     };
 
     const draw = () => {
@@ -90,14 +100,17 @@ export default function DetectionsOverlay({
 
       const nowEpoch = Date.now() / 1000;
       const dataTs = Number(d.ts ?? nowEpoch);
-      const drift = Math.min(nowEpoch - dataTs, DR_HORIZON_S);
+      // instante del video que el usuario esta viendo (video va atrasado
+      // su propia latencia WHEP): los recuadros se proyectan a ese instante
+      const projTime = Math.min(nowEpoch - VIDEO_LATENCY_S, dataTs + DR_HORIZON_S);
+      const drift = Math.max(0, projTime - dataTs);
 
       for (const o of d.objects) {
         if (profile === "people" && o.class && o.class.toLowerCase() !== "person") continue;
         let [nx1, ny1, nx2, ny2] = o.box;
         const key = `${o.id}`;
         const v = velRef.current.get(key);
-        if (v && drift > 0 && drift <= DR_HORIZON_S) {
+        if (v) {
           // dead reckoning: proyectar el centro con la ultima velocidad
           const cx = (nx1 + nx2) / 2 + v.vx * drift;
           const cy = (ny1 + ny2) / 2 + v.vy * drift;
@@ -105,6 +118,22 @@ export default function DetectionsOverlay({
           nx2 += cx - (nx1 + nx2) / 2;
           ny1 += cy - (ny1 + ny2) / 2;
           ny2 += cy - (ny1 + ny2) / 2;
+        }
+        // persecucion suavizada del render: el recuadro dibujado persigue
+        // la proyeccion a CHASE_RATE por segundo (movimiento fluido a 60fps)
+        const rp = renderRef.current.get(key);
+        if (rp) {
+          const k = Math.min(1, CHASE_RATE * (1 / 60));
+          const dcx = (nx1 + nx2) / 2 - rp.x;
+          const dcy = (ny1 + ny2) / 2 - rp.y;
+          rp.x += dcx * k;
+          rp.y += dcy * k;
+          nx1 += rp.x - (nx1 + nx2) / 2;
+          nx2 += rp.x - (nx1 + nx2) / 2;
+          ny1 += rp.y - (ny1 + ny2) / 2;
+          ny2 += rp.y - (ny1 + ny2) / 2;
+        } else {
+          renderRef.current.set(key, { x: (nx1 + nx2) / 2, y: (ny1 + ny2) / 2 });
         }
         const x = nx1 * w, y = ny1 * h, bw = (nx2 - nx1) * w, bh = (ny2 - ny1) * h;
         const color = POSTURE_COLOR[o.posture ?? "unknown"] ?? "#eab308";
