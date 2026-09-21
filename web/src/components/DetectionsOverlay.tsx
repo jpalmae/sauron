@@ -17,6 +17,13 @@ const POSTURE_COLOR: Record<string, string> = {
 
 export type AnalyticsState = "connecting" | "live" | "stale" | "unavailable";
 
+// Compensacion de latencia: entre cada respuesta (300 ms) el recuadro avanza
+// por velocidad muerta (dead reckoning) a 60 fps, dibujandolo donde el objeto
+// esta AHORA en el video en vez de donde estaba cuando se proceso el frame.
+const DR_HORIZON_S = 2.5; // no extrapolar mas alla de 2.5 s sin datos frescos
+
+type VelState = { x: number; y: number; t: number; vx: number; vy: number };
+
 export default function DetectionsOverlay({
   cameraId,
   onState,
@@ -28,63 +35,82 @@ export default function DetectionsOverlay({
   profile?: string;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  // Compensacion de latencia: proyecta cada caja hacia adelante usando la
-  // velocidad observada entre polls, para que el recuadro acompanie al
-  // vehiculo en el video en vivo (el dato llega ~1s despues del video).
-  const trackHistory = useRef<Map<string, { x: number; y: number; t: number; vx: number; vy: number }>>(new Map());
-  const LAG_COMPENSATION = 1.1;
+  const dataRef = useRef<DetectionsPayload | null>(null);
+  const velRef = useRef<Map<string, VelState>>(new Map());
 
   useEffect(() => {
     let alive = true;
     let timer: ReturnType<typeof setTimeout> | null = null;
-    let latest: DetectionsPayload | null = null;
-    const draw = (d: DetectionsPayload | null) => {
+    let raf = 0;
+
+    const updateVelocities = (d: DetectionsPayload) => {
+      const ts = Number(d.ts ?? Date.now() / 1000);
+      for (const o of d.objects) {
+        const key = `${o.id}`;
+        const [nx1, ny1, nx2, ny2] = o.box;
+        const cx = (nx1 + nx2) / 2;
+        const cy = (ny1 + ny2) / 2;
+        const prev = velRef.current.get(key);
+        if (prev) {
+          const dt = ts - prev.t;
+          if (dt > 0.01) {
+            const ivx = (cx - prev.x) / dt;
+            const ivy = (cy - prev.y) / dt;
+            // EMA para suavizar el ruido entre polls
+            prev.vx = prev.vx * 0.5 + ivx * 0.5;
+            prev.vy = prev.vy * 0.5 + ivy * 0.5;
+            prev.x = cx;
+            prev.y = cy;
+            prev.t = ts;
+          }
+        } else {
+          velRef.current.set(key, { x: cx, y: cy, t: ts, vx: 0, vy: 0 });
+        }
+      }
+      // limpiar IDs que ya no estan
+      const seen = new Set(d.objects.map((o) => `${o.id}`));
+      for (const k of velRef.current.keys()) {
+        if (!seen.has(k)) velRef.current.delete(k);
+      }
+    };
+
+    const draw = () => {
+      const d = dataRef.current;
       const canvas = canvasRef.current;
       if (!canvas) return;
       const rect = canvas.getBoundingClientRect();
       const w = Math.max(1, rect.width);
       const h = Math.max(1, rect.height);
-      canvas.width = w;
-      canvas.height = h;
+      if (canvas.width !== Math.round(w)) canvas.width = Math.round(w);
+      if (canvas.height !== Math.round(h)) canvas.height = Math.round(h);
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
       ctx.clearRect(0, 0, w, h);
-      if (!d?.objects?.length) {
-        if (trackHistory.current.size > 200) trackHistory.current.clear();
-        return;
-      }
-      const seen = new Set(d.objects.map((o) => `${o.id}`));
-      for (const k of trackHistory.current.keys()) {
-        if (!seen.has(k)) trackHistory.current.delete(k);
-      }
+      if (!d?.objects?.length) return;
 
-      const nowSec = (d.ts ?? Date.now() / 1000);
+      const nowEpoch = Date.now() / 1000;
+      const dataTs = Number(d.ts ?? nowEpoch);
+      const drift = Math.min(nowEpoch - dataTs, DR_HORIZON_S);
+
       for (const o of d.objects) {
         if (profile === "people" && o.class && o.class.toLowerCase() !== "person") continue;
         let [nx1, ny1, nx2, ny2] = o.box;
-        const cx = (nx1 + nx2) / 2, cy = (ny1 + ny2) / 2;
-        const oid = `${o.id}`;
-        const prev = trackHistory.current.get(oid);
-        if (prev && nowSec - prev.t > 0.01) {
-          const dt = nowSec - prev.t;
-          const ivx = (cx - prev.x) / dt;
-          const ivy = (cy - prev.y) / dt;
-          prev.vx = prev.vx * 0.6 + ivx * 0.4;
-          prev.vy = prev.vy * 0.6 + ivy * 0.4;
-          prev.x = cx; prev.y = cy; prev.t = nowSec;
-          const shiftX = Math.max(-0.25, Math.min(0.25, prev.vx * LAG_COMPENSATION));
-          const shiftY = Math.max(-0.25, Math.min(0.25, prev.vy * LAG_COMPENSATION));
-          nx1 += shiftX; nx2 += shiftX; ny1 += shiftY; ny2 += shiftY;
-        } else {
-          trackHistory.current.set(oid, { x: cx, y: cy, t: nowSec, vx: 0, vy: 0 });
+        const key = `${o.id}`;
+        const v = velRef.current.get(key);
+        if (v && drift > 0 && drift <= DR_HORIZON_S) {
+          // dead reckoning: proyectar el centro con la ultima velocidad
+          const cx = (nx1 + nx2) / 2 + v.vx * drift;
+          const cy = (ny1 + ny2) / 2 + v.vy * drift;
+          nx1 += cx - (nx1 + nx2) / 2;
+          nx2 += cx - (nx1 + nx2) / 2;
+          ny1 += cy - (ny1 + ny2) / 2;
+          ny2 += cy - (ny1 + ny2) / 2;
         }
         const x = nx1 * w, y = ny1 * h, bw = (nx2 - nx1) * w, bh = (ny2 - ny1) * h;
         const color = POSTURE_COLOR[o.posture ?? "unknown"] ?? "#eab308";
-        // box
         ctx.strokeStyle = color;
         ctx.lineWidth = 2;
         ctx.strokeRect(x, y, bw, bh);
-        // skeleton
         if (o.keypoints?.length) {
           ctx.strokeStyle = color;
           ctx.lineWidth = 2;
@@ -98,7 +124,6 @@ export default function DetectionsOverlay({
             ctx.stroke();
           }
         }
-        // label
         const detail = o.vehicle_type ?? o.posture;
         const label = `${o.class} #${o.id}${detail ? ` · ${detail}` : ""}`;
         ctx.font = "600 11px ui-monospace, monospace";
@@ -110,13 +135,18 @@ export default function DetectionsOverlay({
       }
     };
 
+    const rafLoop = () => {
+      draw();
+      raf = requestAnimationFrame(rafLoop);
+    };
+
     const load = () => {
       void api
         .detections(cameraId)
         .then((d) => {
           if (!alive) return;
-          latest = d;
-          draw(d);
+          updateVelocities(d);
+          dataRef.current = d;
           onState?.(d.status);
         })
         .catch(() => alive && onState?.("unavailable"))
@@ -127,10 +157,12 @@ export default function DetectionsOverlay({
         });
     };
     load();
-    const onResize = () => draw(latest);
+    raf = requestAnimationFrame(rafLoop);
+    const onResize = () => draw();
     window.addEventListener("resize", onResize);
     return () => {
       alive = false;
+      cancelAnimationFrame(raf);
       if (timer) clearTimeout(timer);
       window.removeEventListener("resize", onResize);
     };
