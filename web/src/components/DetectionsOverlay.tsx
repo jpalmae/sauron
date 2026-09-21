@@ -27,9 +27,8 @@ const VIDEO_LATENCY_S = 0.45;
 // Suavizado del render: velocidad con la que el recuadro persigue su
 // posicion proyectada (por segundo). Mayor = sigue mas rapido.
 const CHASE_RATE = 10;
-// zona muerta: personas lentas/quietas no se proyectan con ruido
+const VEL_ALPHA = 0.6;
 const SPEED_FLOOR = 0.045;
-const VEL_ALPHA = 0.35;
 
 type VelState = { x: number; y: number; t: number; vx: number; vy: number };
 
@@ -189,7 +188,7 @@ export default function DetectionsOverlay({
         .finally(() => {
           // Never overlap requests. A fixed interval can exhaust browser and
           // API connections when one response is delayed or a camera drops.
-          if (alive) timer = setTimeout(load, 300);
+          if (alive) timer = setTimeout(load, 150);
         });
     };
     load();
