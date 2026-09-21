@@ -28,6 +28,11 @@ export default function DetectionsOverlay({
   profile?: string;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  // Compensacion de latencia: proyecta cada caja hacia adelante usando la
+  // velocidad observada entre polls, para que el recuadro acompanie al
+  // vehiculo en el video en vivo (el dato llega ~1s despues del video).
+  const trackHistory = useRef<Map<string, { x: number; y: number; t: number; vx: number; vy: number }>>(new Map());
+  const LAG_COMPENSATION = 1.1;
 
   useEffect(() => {
     let alive = true;
@@ -44,11 +49,35 @@ export default function DetectionsOverlay({
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
       ctx.clearRect(0, 0, w, h);
-      if (!d?.objects?.length) return;
+      if (!d?.objects?.length) {
+        if (trackHistory.current.size > 200) trackHistory.current.clear();
+        return;
+      }
+      const seen = new Set(d.objects.map((o) => `${o.id}`));
+      for (const k of trackHistory.current.keys()) {
+        if (!seen.has(k)) trackHistory.current.delete(k);
+      }
 
+      const nowSec = (d.ts ?? Date.now() / 1000);
       for (const o of d.objects) {
         if (profile === "people" && o.class && o.class.toLowerCase() !== "person") continue;
-        const [nx1, ny1, nx2, ny2] = o.box;
+        let [nx1, ny1, nx2, ny2] = o.box;
+        const cx = (nx1 + nx2) / 2, cy = (ny1 + ny2) / 2;
+        const oid = `${o.id}`;
+        const prev = trackHistory.current.get(oid);
+        if (prev && nowSec - prev.t > 0.01) {
+          const dt = nowSec - prev.t;
+          const ivx = (cx - prev.x) / dt;
+          const ivy = (cy - prev.y) / dt;
+          prev.vx = prev.vx * 0.6 + ivx * 0.4;
+          prev.vy = prev.vy * 0.6 + ivy * 0.4;
+          prev.x = cx; prev.y = cy; prev.t = nowSec;
+          const shiftX = Math.max(-0.25, Math.min(0.25, prev.vx * LAG_COMPENSATION));
+          const shiftY = Math.max(-0.25, Math.min(0.25, prev.vy * LAG_COMPENSATION));
+          nx1 += shiftX; nx2 += shiftX; ny1 += shiftY; ny2 += shiftY;
+        } else {
+          trackHistory.current.set(oid, { x: cx, y: cy, t: nowSec, vx: 0, vy: 0 });
+        }
         const x = nx1 * w, y = ny1 * h, bw = (nx2 - nx1) * w, bh = (ny2 - ny1) * h;
         const color = POSTURE_COLOR[o.posture ?? "unknown"] ?? "#eab308";
         // box
