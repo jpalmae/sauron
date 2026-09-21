@@ -27,6 +27,9 @@ const VIDEO_LATENCY_S = 0.45;
 // Suavizado del render: velocidad con la que el recuadro persigue su
 // posicion proyectada (por segundo). Mayor = sigue mas rapido.
 const CHASE_RATE = 10;
+// zona muerta: personas lentas/quietas no se proyectan con ruido
+const SPEED_FLOOR = 0.045;
+const VEL_ALPHA = 0.35;
 
 type VelState = { x: number; y: number; t: number; vx: number; vy: number };
 
@@ -64,8 +67,8 @@ export default function DetectionsOverlay({
             const ivx = (cx - prev.x) / dt;
             const ivy = (cy - prev.y) / dt;
             // EMA para suavizar el ruido entre polls
-            prev.vx = prev.vx * 0.5 + ivx * 0.5;
-            prev.vy = prev.vy * 0.5 + ivy * 0.5;
+            prev.vx = prev.vx * (1 - VEL_ALPHA) + ivx * VEL_ALPHA;
+            prev.vy = prev.vy * (1 - VEL_ALPHA) + ivy * VEL_ALPHA;
             prev.x = cx;
             prev.y = cy;
             prev.t = ts;
@@ -110,6 +113,10 @@ export default function DetectionsOverlay({
         let [nx1, ny1, nx2, ny2] = o.box;
         const key = `${o.id}`;
         const v = velRef.current.get(key);
+        if (v && Math.hypot(v.vx, v.vy) < SPEED_FLOOR) {
+          v.vx = 0;
+          v.vy = 0;
+        }
         if (v) {
           // dead reckoning: proyectar el centro con la ultima velocidad
           const cx = (nx1 + nx2) / 2 + v.vx * drift;
