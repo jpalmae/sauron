@@ -7,6 +7,7 @@ const PROVIDERS = [
   { value: "demo", label: "Demo (datos sintéticos locales)" },
   { value: "boostr", label: "Boostr.cl (REST, JSON)" },
   { value: "matriculaapi", label: "MatriculaAPI (SOAP regcheck)" },
+  { value: "autoriesgo", label: "AutoRiesgo.cl (REST, X-Api-Key)" },
 ];
 
 export default function ConfigApiPage() {
@@ -92,6 +93,17 @@ export default function ConfigApiPage() {
               />
             </label>
           </div>
+
+          {(cfg.provider === "autoriesgo" || cfg.ar_api_key) && (
+            <label className="mt-3 block text-xs text-mut">
+              API Key AutoRiesgo (X-Api-Key)
+              <input
+                value={cfg.ar_api_key ?? ""}
+                onChange={(e) => set({ ar_api_key: e.target.value })}
+                className={`${field} mt-1 w-full font-mono`}
+              />
+            </label>
+          )}
 
           {(cfg.provider === "boostr" || cfg.api_key) && (
             <label className="mt-3 block text-xs text-mut">

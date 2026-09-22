@@ -42,6 +42,7 @@ async def put_alpr_config(config: dict, _: None = Depends(get_current_user)) -> 
         "license_key",
         "endpoint",
         "operation",
+        "ar_api_key",
         "query_det_conf",
         "query_ocr_conf",
         "validate_plate",
