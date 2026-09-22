@@ -1,0 +1,11 @@
+# Ultralytics tracker personalizado Sauron — persistencia extendida
+# track_buffer 75: un track sobrevive ~3s de oclusión (postes/árboles) a 25fps
+# sin cambiar de identidad. Basado en bytetrack.yaml de ultralytics.
+
+tracker_type: bytetrack
+track_high_thresh: 0.25
+track_low_thresh: 0.1
+new_track_thresh: 0.25
+track_buffer: 75
+match_thresh: 0.8
+fuse_score: True

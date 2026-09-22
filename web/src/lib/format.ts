@@ -5,6 +5,8 @@ export const CLASS_ICONS: Record<string, LucideIcon> = {
   bus: Bus,
   truck: Truck,
   motorcycle: Bike,
+  bicycle: Bike,
+  scooter: Bike,
 };
 
 export const CLASS_LABELS: Record<string, string> = {
@@ -15,6 +17,7 @@ export const CLASS_LABELS: Record<string, string> = {
   bicycle: "Bicicleta",
   person: "Persona",
   dog: "Perro",
+  scooter: "Scooter eléctrico",
 };
 
 // Etiqueta de clase con actividad para personas segun velocidad (km/h)
