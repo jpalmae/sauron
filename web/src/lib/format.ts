@@ -17,6 +17,17 @@ export const CLASS_LABELS: Record<string, string> = {
   dog: "Perro",
 };
 
+// Etiqueta de clase con actividad para personas segun velocidad (km/h)
+export function classActivityLabel(cls: string, speedKmh?: unknown): string {
+  if (cls === "person") {
+    const v = typeof speedKmh === "number" ? speedKmh : null;
+    if (v != null && v >= 8) return "Persona corriendo";
+    if (v != null) return "Persona caminando";
+    return "Persona";
+  }
+  return CLASS_LABELS[cls] ?? cls;
+}
+
 export const DIRECTION_LABELS: Record<string, string> = {
   forward: "ida",
   reverse: "vuelta",

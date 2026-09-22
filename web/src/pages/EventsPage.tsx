@@ -8,7 +8,7 @@ import {
   type EventPage,
 } from "../lib/api";
 import {
-  CLASS_LABELS,
+  classActivityLabel,
   DIRECTION_LABELS,
   EVENT_LABELS,
   SEVERITY_CLASSES,
@@ -338,7 +338,7 @@ export default function EventsPage({ domain }: { domain?: Domain }) {
                     </span>
                   </td>
                   <td className="px-4 py-2.5 text-mut">
-                    {CLASS_LABELS[cls] ?? "—"}
+                    {cls ? classActivityLabel(cls, e.metadata?.speed_kmh) : "—"}
                     {(() => {
                       const vt = String(e.metadata?.vehicle_type ?? "");
                       if (!vt) return null;

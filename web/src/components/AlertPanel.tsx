@@ -8,6 +8,7 @@ import {
   SEVERITY_DOT,
   fmtTime,
   relTime,
+  classActivityLabel,
 } from "../lib/format";
 
 export interface AlertEntry extends EventItem {
@@ -43,6 +44,7 @@ function AlertRow({
         </div>
         <div className="mt-0.5 flex items-center gap-2 text-xs text-mut">
           {Icon && <Icon size={13} />}
+          {cls && <span>{classActivityLabel(cls, meta.speed_kmh)}</span>}
           {alert.rule_id && <span className="truncate font-mono text-[11px]">{alert.rule_id}</span>}
           {typeof meta.speed_kmh === "number" && (
             <span className="font-mono text-[11px]">{meta.speed_kmh} km/h</span>
