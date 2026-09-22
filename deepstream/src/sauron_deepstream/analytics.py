@@ -54,7 +54,6 @@ class TrackAssembler:
         frame_number: int,
         timestamp: float,
         detections: list[Detection],
-        vehicle_types: dict[tuple[str, int], str] | None = None,
     ) -> list[TrackedObject]:
         tracks: list[TrackedObject] = []
         active: set[tuple[str, int]] = set()

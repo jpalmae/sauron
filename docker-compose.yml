@@ -11,6 +11,11 @@ services:
     environment:
       NVIDIA_VISIBLE_DEVICES: GPU-bdd8d90e-0c61-c97f-1cbf-1f48cc722f9d
       SAURON_DS_TRACKER_CONFIG: /models/Tracker/config_tracker_accuracy.yml
+      SAURON_DS_EXCLUDE_STREAMS: cam-119
+      SAURON_DS_PGIE_TEMPLATE: /app/deepstream/configs/pgie_yolox.ini.tmpl
+      SAURON_DS_PRIMARY_MODEL: /models/tao/yolox_s_dyn.onnx
+      SAURON_DS_PRIMARY_LABELS: /models/tao/yolox_labels.txt
+      SAURON_DS_ALLOWED_CLASSES: person,bicycle,car,motorcycle,bus,truck,dog
       NVIDIA_DRIVER_CAPABILITIES: compute,video,utility
       SAURON_REDIS_URL: redis://redis:6379/0
       SAURON_API_URL: http://api:8000
@@ -55,9 +60,46 @@ services:
       timeout: 5s
       retries: 12
       start_period: 15m
+
+  track:
+    build:
+      context: .
+      dockerfile: deploy/docker/track.Dockerfile
+    image: sauron/track:0.1.0
+    restart: unless-stopped
+    environment:
+      NVIDIA_VISIBLE_DEVICES: GPU-c07538bc-30f4-cf72-3a5d-c63010501522
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+      SAURON_REDIS_URL: redis://redis:6379/0
+      SAURON_API_URL: http://api:8000/api/v1
+      SAURON_INGEST_TOKEN: ${INGEST_TOKEN}
+      SAURON_TRACK_CAMERAS: cam-119
+      SAURON_TRACK_DEVICE: 0
+      SAURON_TRACK_FPS: "20"
+      SAURON_TRACK_CONF: "0.30"
+      SAURON_TRACK_CLASSES: 0,1,2,3,5,7,16
+      SAURON_TRACK_GO2RTC_API: http://go2rtc:1984
     depends_on:
+      api:
+        condition: service_healthy
       redis:
         condition: service_healthy
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: [gpu]
+    volumes:
+      - track-models:/root/.cache
+    ports:
+      - "8094:8094"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8094/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 12
+      start_period: 5m
 
   api:
     build:
@@ -320,3 +362,4 @@ volumes:
   deepstream-engines:
   alpr-models:
   prometheus-data:
+  track-models:
