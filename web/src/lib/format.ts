@@ -8,7 +8,7 @@ export const CLASS_ICONS: Record<string, LucideIcon> = {
 };
 
 export const CLASS_LABELS: Record<string, string> = {
-  car: "Liviano",
+  car: "Auto",
   bus: "Bus",
   truck: "Camión",
   motorcycle: "Moto",
