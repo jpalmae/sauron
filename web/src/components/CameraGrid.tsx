@@ -130,7 +130,7 @@ function LiveTile({ camera, onOpen }: { camera: Camera; onOpen?: (c: Camera) => 
       className="group relative cursor-pointer overflow-hidden rounded-lg border border-line bg-panel transition-colors hover:border-brand/50"
       onClick={() => onOpen?.(camera)}
     >
-      <DetectionsOverlay cameraId={camera.id} onState={setAnalyticsState} />
+      <DetectionsOverlay cameraId={camera.id} onState={setAnalyticsState} profile={camera.analytics_profile} />
       {source?.kind === "hls" && <HlsVideo url={source.url} onState={setState} />}
       {source?.kind === "whep" && <WhepVideo url={source.url} onState={setState} />}
       {(!source || state !== "live") && (

@@ -62,6 +62,7 @@ class Metrics:
         cooldown: float,
         max_attempts: int,
         now_monotonic: float | None = None,
+        rearm_seconds: float = 900.0,
     ) -> list[str]:
         """Return stalled cameras that are eligible for a source-level restart."""
         now = time.monotonic() if now_monotonic is None else now_monotonic
@@ -69,7 +70,13 @@ class Metrics:
             candidates: list[str] = []
             for camera_id, active_since in self._active_since.items():
                 if self._consecutive_recoveries[camera_id] >= max_attempts:
-                    continue
+                    # Re-armar: la camara pudo volver por si sola (corte largo);
+                    # reintentar periodicamente en vez de abandonarla para siempre.
+                    started = self._recovery_started.get(camera_id)
+                    if started is not None and now - started >= rearm_seconds:
+                        self._consecutive_recoveries[camera_id] = 0
+                    else:
+                        continue
                 recovery_started = self._recovery_started.get(camera_id)
                 if recovery_started is not None:
                     if now - recovery_started >= max(stale_after, cooldown):

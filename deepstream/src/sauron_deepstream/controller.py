@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import os
 import threading
 import time
 from collections.abc import Callable
@@ -54,6 +55,11 @@ class SourceController:
         self._recovery_attempts = recovery_attempts
         self._restart_process = restart_process
         self._restart_requested = False
+        self._excluded = {
+            c.strip()
+            for c in os.environ.get('SAURON_DS_EXCLUDE_STREAMS', '').split(',')
+            if c.strip()
+        }
         self._active: dict[str, Camera] = {}
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -84,6 +90,8 @@ class SourceController:
         desired: dict[str, Camera] = {}
         for payload in payloads:
             stream_id = str(payload.get("stream_id") or "")
+            if stream_id in self._excluded:
+                continue
             if stream_id and camera_shard(stream_id, self._shard_count) != self._shard_index:
                 continue
             raw_uri = str(payload.get("rtsp_url") or "").strip()

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Clock, Hash, TrendingUp, Users } from "lucide-react";
+import { Clock, Footprints, Hash, PersonStanding, TrendingUp, Users } from "lucide-react";
 import { api, type OccupancyStats } from "../lib/api";
 
 export default function OccupancyWidget({
@@ -28,6 +28,8 @@ export default function OccupancyWidget({
 
   const rows: { icon: typeof Users; label: string; value: string | number }[] = [
     { icon: Users, label: "Ahora", value: s?.count ?? "—" },
+    { icon: PersonStanding, label: "Paradas", value: s?.standing ?? "—" },
+    { icon: Footprints, label: "En mov.", value: s?.moving ?? "—" },
     { icon: TrendingUp, label: "Pico hoy", value: s?.peak_today ?? s?.peak ?? "—" },
     { icon: Hash, label: "Únicos", value: s?.unique_total ?? "—" },
     { icon: Clock, label: "Permanencia", value: s?.avg_dwell_s != null ? `${s.avg_dwell_s}s` : "—" },
@@ -39,7 +41,7 @@ export default function OccupancyWidget({
         <span className="font-display text-xs font-medium text-mut">{name}</span>
         <span className="font-mono text-[10px] text-dim">DeepStream · NvDCF</span>
       </div>
-      <div className="grid grid-cols-4 gap-2">
+      <div className="grid grid-cols-3 gap-2">
         {rows.map((c) => (
           <div
             key={c.label}

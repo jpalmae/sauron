@@ -164,6 +164,7 @@ export interface AlprConfig {
   license_key?: string;
   endpoint?: string;
   operation?: string;
+  ar_api_key?: string;
   query_det_conf?: number;
   query_ocr_conf?: number;
   validate_plate?: boolean;

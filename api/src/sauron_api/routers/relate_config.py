@@ -6,9 +6,9 @@ from fastapi import APIRouter, Depends
 
 from ..auth import get_current_user, require_ingest
 
-router = APIRouter(prefix="/alpr-config", tags=["alpr"])
+router = APIRouter(prefix="/relate-config", tags=["relate"])
 
-_KEY = "sauron:alpr:config"
+_KEY = "sauron:relate:config"
 
 _aioredis = None
 
@@ -25,29 +25,22 @@ def _redis_client():
 
 
 @router.get("")
-async def get_alpr_config(_: None = Depends(require_ingest)) -> dict:
+async def get_relate_config(_: None = Depends(require_ingest)) -> dict:
     raw = await _redis_client().get(_KEY)
     return json.loads(raw) if raw else {}
 
 
 @router.put("")
-async def put_alpr_config(config: dict, _: None = Depends(get_current_user)) -> dict:
+async def put_relate_config(config: dict, _: None = Depends(get_current_user)) -> dict:
     allowed = {
-        "provider",
-        "api_url",
-        "api_key",
-        "include_owner",
+        "vocabulary",
+        "fps",
+        "score_threshold",
+        "min_frames",
+        "cooldown_s",
         "cameras",
-        "username",
-        "license_key",
-        "endpoint",
-        "operation",
-        "ar_api_key",
-        "query_det_conf",
-        "query_ocr_conf",
-        "validate_plate",
-        "region",
+        "enabled",
     }
     clean = {k: v for k, v in config.items() if k in allowed and v not in (None, "")}
     await _redis_client().set(_KEY, json.dumps(clean))
-    return {"saved": len(clean), "applies_in_seconds": 15}
+    return {"saved": len(clean), "applies_in_seconds": 10}

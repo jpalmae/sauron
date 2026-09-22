@@ -1,0 +1,13 @@
+torch>=2.4
+torchvision
+transformers>=4.44
+huggingface_hub>=0.24
+opencv-python-headless>=4.9
+redis>=5.0
+numpy
+pillow
+fastapi>=0.110
+uvicorn[standard]>=0.29
+httpx>=0.27
+pydantic>=2.7
+relsgg @ git+https://github.com/Maelic/RelateAnything.git

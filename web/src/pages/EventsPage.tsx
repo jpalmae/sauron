@@ -9,13 +9,14 @@ import {
 } from "../lib/api";
 import {
   CLASS_LABELS,
+  DIRECTION_LABELS,
   EVENT_LABELS,
   SEVERITY_CLASSES,
   fmtDateTime,
 } from "../lib/format";
 import { filterEventsByDomain, type Domain } from "../lib/domain";
 
-const TRAFFIC_TYPES = ["LINE_CROSSING", "STOPPED_VEHICLE", "OBSTRUCTION", "WRONG_WAY", "CONGESTION", "ALPR", "ALPR_WATCHLIST", "TRAVEL_TIME", "CAMERA_OFFLINE", "CAMERA_ONLINE", "AUDIO_ANOMALY"];
+const TRAFFIC_TYPES = ["RELATION", "LINE_CROSSING", "STOPPED_VEHICLE", "OBSTRUCTION", "WRONG_WAY", "CONGESTION", "ALPR", "ALPR_WATCHLIST", "TRAVEL_TIME", "CAMERA_OFFLINE", "CAMERA_ONLINE", "AUDIO_ANOMALY"];
 const PEOPLE_TYPES = ["OCCUPANCY", "CHAIR_OCCUPANCY", "GROUPING", "FALL"];
 const MATRICULAS_TYPES = ["ALPR", "ALPR_WATCHLIST"];
 const EVENT_TYPES = [...TRAFFIC_TYPES, ...PEOPLE_TYPES];
@@ -318,7 +319,17 @@ export default function EventsPage({ domain }: { domain?: Domain }) {
                     {fmtDateTime(e.timestamp)}
                   </td>
                   <td className="px-4 py-2.5">{camName(e.camera_id)}</td>
-                  <td className="px-4 py-2.5">{EVENT_LABELS[e.event_type] ?? e.event_type}</td>
+                  <td className="px-4 py-2.5">
+                    {e.event_type === "RELATION"
+                      ? `${e.metadata?.subject_class ?? "?"} ${e.metadata?.predicate ?? ""} ${e.metadata?.object_class ?? ""}`
+                      : EVENT_LABELS[e.event_type] ?? e.event_type}
+                    {e.event_type === "LINE_CROSSING" && (
+                      <span className="ml-1 font-mono text-[10px] text-mut">
+                        {e.metadata?.line_id ? `· ${e.metadata.line_id}` : ""}
+                        {e.metadata?.direction ? ` · ${DIRECTION_LABELS[String(e.metadata.direction)] ?? e.metadata.direction}` : ""}
+                      </span>
+                    )}
+                  </td>
                   <td className="px-4 py-2.5">
                     <span
                       className={`rounded-full border px-2 py-0.5 font-mono text-[10px] ${SEVERITY_CLASSES[e.priority]}`}
@@ -326,7 +337,15 @@ export default function EventsPage({ domain }: { domain?: Domain }) {
                       {e.priority}
                     </span>
                   </td>
-                  <td className="px-4 py-2.5 text-mut">{CLASS_LABELS[cls] ?? "—"}</td>
+                  <td className="px-4 py-2.5 text-mut">
+                    {CLASS_LABELS[cls] ?? "—"}
+                    {(() => {
+                      const vt = String(e.metadata?.vehicle_type ?? "");
+                      if (!vt) return null;
+                      const vtEs: Record<string, string> = { sedan: "Sedán", suv: "SUV", truck: "Pick-up", van: "Furgón", largevehicle: "Veh. grande", coupe: "Coupé" };
+                      return <span className="ml-1 font-mono text-[10px] text-info">· {vtEs[vt] ?? vt}</span>;
+                    })()}
+                  </td>
                   <td className="px-4 py-2.5 text-right font-mono text-xs text-mut">
                     {e.confidence?.toFixed(2) ?? "—"}
                   </td>

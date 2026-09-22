@@ -4,7 +4,7 @@ import os
 from dataclasses import dataclass
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class StreamSpec:
     camera_id: str
     source: str
@@ -43,7 +43,7 @@ def _bool_env(name: str, default: bool) -> bool:
     return os.getenv(name, str(default)).strip().lower() in ("1", "true", "yes")
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class Settings:
     streams: tuple[StreamSpec, ...]
     go2rtc_url: str
@@ -69,6 +69,8 @@ class Settings:
     query_det_conf: float
     query_ocr_conf: float
     matricula_username: str
+    autoriesgo_key: str
+    autoriesgo_endpoint: str
     matricula_key: str
     matricula_endpoint: str
     matricula_operation: str
@@ -121,6 +123,11 @@ class Settings:
             query_det_conf=_float_env("SAURON_ALPR_QUERY_DET_CONF", 1.0, 0.0),
             query_ocr_conf=_float_env("SAURON_ALPR_QUERY_OCR_CONF", 1.0, 0.0),
             matricula_username=os.getenv("SAURON_ALPR_MATRICULA_USERNAME", "").strip(),
+            autoriesgo_key=os.getenv("SAURON_ALPR_AUTORIESGO_KEY", "").strip(),
+            autoriesgo_endpoint=os.getenv(
+                "SAURON_ALPR_AUTORIESGO_ENDPOINT",
+                "https://api.autoriesgo.cl/api/v1/vehicle",
+            ).rstrip("/"),
             matricula_key=os.getenv("SAURON_ALPR_MATRICULA_KEY", "").strip(),
             matricula_endpoint=os.getenv(
                 "SAURON_ALPR_MATRICULA_ENDPOINT",

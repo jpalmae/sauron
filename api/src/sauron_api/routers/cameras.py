@@ -214,6 +214,8 @@ async def camera_occupancy(
     return {
         "timestamp": latest.timestamp.isoformat() if latest else None,
         "count": meta.get("count"),
+        "standing": meta.get("standing"),
+        "moving": meta.get("moving"),
         "by_class": meta.get("by_class"),
         "unique_total": meta.get("unique_total"),
         "avg_dwell_s": meta.get("avg_dwell_s"),

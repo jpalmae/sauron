@@ -128,6 +128,7 @@ class _LineCrossing:
                     {
                         "line_id": self.config.id,
                         "vehicle_class": track.class_name,
+                        "vehicle_type": getattr(track, "vehicle_type", None),
                         "direction": direction,
                         "centroid": list(current),
                         "speed_kmh": round(track.speed_kmh, 1) if track.speed_kmh else None,
@@ -316,6 +317,7 @@ class _Occupancy:
         self._seen: set[int] = set()
         self._peak = 0
         self._last_emit = float("-inf")
+        self._speed_hist: dict[int, deque[float]] = {}
 
     def process(self, frame, tracks, thresholds, fps) -> list[Event]:
         people = [
@@ -332,6 +334,20 @@ class _Occupancy:
             self._seen.add(track.object_id)
 
         count = len(people)
+        standing = 0
+        moving = 0
+        for track in people:
+            height_px = max(1.0, track.bbox[3] - track.bbox[1])
+            speed_px_s = math.hypot(*track.velocity) * fps
+            rel = speed_px_s / height_px
+            hist = self._speed_hist.setdefault(track.object_id, deque(maxlen=5))
+            hist.append(rel)
+            if sum(hist) / len(hist) > 0.3:
+                moving += 1
+            else:
+                standing += 1
+        for object_id in set(self._speed_hist) - active:
+            self._speed_hist.pop(object_id, None)
         self._peak = max(self._peak, count)
         if frame.timestamp - self._last_emit < thresholds.occupancy_interval_s:
             return []
@@ -352,6 +368,8 @@ class _Occupancy:
                 metadata={
                     "polygon_id": self.config.id,
                     "count": count,
+                    "standing": standing,
+                    "moving": moving,
                     "by_class": {"person": count},
                     "unique_total": len(self._seen),
                     "avg_dwell_s": round(avg_dwell, 1),

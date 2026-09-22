@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import secrets
 import time
 from contextlib import asynccontextmanager
@@ -9,6 +10,10 @@ from typing import Annotated
 from fastapi import Depends, FastAPI, HTTPException, Response, status
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message)s", force=True)
+for _name in ("uvicorn", "uvicorn.access", "uvicorn.error"):
+    logging.getLogger(_name).setLevel(logging.WARNING)
 
 from .config import Settings
 from .runtime import ALPRRuntime

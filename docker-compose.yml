@@ -9,7 +9,13 @@ services:
     profiles: ["gpu"] # requires nvidia-container-toolkit on the host
     restart: unless-stopped
     environment:
-      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_VISIBLE_DEVICES: GPU-bdd8d90e-0c61-c97f-1cbf-1f48cc722f9d
+      SAURON_DS_TRACKER_CONFIG: /models/Tracker/config_tracker_accuracy.yml
+      SAURON_DS_EXCLUDE_STREAMS: cam-119
+      SAURON_DS_PGIE_TEMPLATE: /app/deepstream/configs/pgie_yolox.ini.tmpl
+      SAURON_DS_PRIMARY_MODEL: /models/tao/yolox_s_dyn.onnx
+      SAURON_DS_PRIMARY_LABELS: /models/tao/yolox_labels.txt
+      SAURON_DS_ALLOWED_CLASSES: person,bicycle,car,motorcycle,bus,truck,dog
       NVIDIA_DRIVER_CAPABILITIES: compute,video,utility
       SAURON_REDIS_URL: redis://redis:6379/0
       SAURON_API_URL: http://api:8000
@@ -28,11 +34,6 @@ services:
       SAURON_DS_RECOVERY_ATTEMPTS: "3"
       SAURON_DS_SOURCE_REST_PORT: "9010"
       SAURON_DS_HEALTH_PORT: "9100"
-      SAURON_DS_EVIDENCE_ENABLED: ${EVIDENCE_ENABLED:-true}
-      SAURON_DS_EVIDENCE_DIR: /var/lib/sauron/evidence
-      SAURON_DS_EVIDENCE_PRE_S: ${EVIDENCE_PRE_SECONDS:-5}
-      SAURON_DS_EVIDENCE_POST_S: ${EVIDENCE_POST_SECONDS:-10}
-      SAURON_DS_EVIDENCE_RETENTION_S: ${EVIDENCE_RETENTION_SECONDS:-120}
     deploy:
       resources:
         reservations:
@@ -44,20 +45,61 @@ services:
               # some NVIDIA Container Toolkit versions, so nvmultiurisrcbin
               # cannot be created even though CUDA itself is available.
               capabilities: [gpu]
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
     volumes:
       - deepstream-engines:/models
-      - deepstream-evidence:/var/lib/sauron/evidence
     ports:
       - "9100:9100" # prometheus metrics + healthz
     healthcheck:
-      test: ["CMD", "/opt/sauron/bin/python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:9100/healthz')"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:9100/healthz"]
       interval: 15s
       timeout: 5s
       retries: 12
       start_period: 15m
+
+  track:
+    build:
+      context: .
+      dockerfile: deploy/docker/track.Dockerfile
+    image: sauron/track:0.1.0
+    restart: unless-stopped
+    environment:
+      NVIDIA_VISIBLE_DEVICES: GPU-c07538bc-30f4-cf72-3a5d-c63010501522
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+      SAURON_REDIS_URL: redis://redis:6379/0
+      SAURON_API_URL: http://api:8000/api/v1
+      SAURON_INGEST_TOKEN: ${INGEST_TOKEN}
+      SAURON_TRACK_CAMERAS: cam-119
+      SAURON_TRACK_DEVICE: 0
+      SAURON_TRACK_FPS: "20"
+      SAURON_TRACK_CONF: "0.30"
+      SAURON_TRACK_CLASSES: 0,1,2,3,5,7,16
+      SAURON_TRACK_GO2RTC_API: http://go2rtc:1984
     depends_on:
+      api:
+        condition: service_healthy
       redis:
         condition: service_healthy
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: [gpu]
+    volumes:
+      - track-models:/root/.cache
+    ports:
+      - "8094:8094"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8094/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 12
+      start_period: 5m
 
   api:
     build:
@@ -114,6 +156,7 @@ services:
     volumes:
       # white-label: drop client logos/favicon here, no rebuild needed
       - ./brand:/usr/share/nginx/html/brand:ro
+      - ./deploy/docker/nginx.conf:/etc/nginx/templates/default.conf.template:ro
     depends_on:
       - api
 
@@ -151,11 +194,16 @@ services:
       SAURON_ALPR_VEHICLE_INCLUDE_OWNER: ${ALPR_VEHICLE_INCLUDE_OWNER:-false}
       SAURON_ALPR_VEHICLE_PROVIDER: ${ALPR_VEHICLE_PROVIDER:-}
       SAURON_ALPR_VEHICLE_CAMERAS: ${ALPR_VEHICLE_CAMERAS:-}
+      SAURON_ALPR_VALIDATE_PLATE: ${ALPR_VALIDATE_PLATE:-false}
+      SAURON_ALPR_QUERY_DET_CONF: ${ALPR_QUERY_DET_CONF:-1.0}
+      SAURON_ALPR_QUERY_OCR_CONF: ${ALPR_QUERY_OCR_CONF:-1.0}
       SAURON_ALPR_MATRICULA_USERNAME: ${ALPR_MATRICULA_USERNAME:-}
       SAURON_ALPR_MATRICULA_KEY: ${ALPR_MATRICULA_KEY:-}
       SAURON_ALPR_MATRICULA_ENDPOINT: ${ALPR_MATRICULA_ENDPOINT:-https://www.regcheck.org.uk/api/reg.asmx}
       SAURON_ALPR_MATRICULA_OPERATION: ${ALPR_MATRICULA_OPERATION:-CheckChile}
       SAURON_ALPR_REGION: ${ALPR_REGION:-}
+      SAURON_ALPR_BESTSHOT_WAIT_S: ${ALPR_BESTSHOT_WAIT_S:-4}
+      SAURON_ALPR_BESTSHOT_CONF: ${ALPR_BESTSHOT_CONF:-0.95}
       SAURON_ALPR_DETECTOR_CONFIDENCE: ${ALPR_DETECTOR_CONFIDENCE:-0.25}
       SAURON_ALPR_OCR_CONFIDENCE: ${ALPR_OCR_CONFIDENCE:-0.65}
     deploy:
@@ -180,7 +228,6 @@ services:
         condition: service_healthy
       go2rtc:
         condition: service_started
-
 
   # Optional RTSP -> WebRTC gateway for the live grid (WHEP players).
   # Add each camera as a path in mediamtx.yml and enable with:
@@ -271,11 +318,48 @@ services:
         mc mb --ignore-existing "local/$${EVENTS_BUCKET}"
         mc anonymous set download "local/$${EVENTS_BUCKET}/public"
 
+  relate:
+    build:
+      context: .
+      dockerfile: deploy/docker/relate.Dockerfile
+    image: sauron/relate:0.1.0
+    restart: unless-stopped
+    environment:
+      NVIDIA_VISIBLE_DEVICES: GPU-c07538bc-30f4-cf72-3a5d-c63010501522
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+      SAURON_REDIS_URL: redis://redis:6379/0
+      SAURON_API_URL: http://api:8000/api/v1
+      SAURON_INGEST_TOKEN: ${INGEST_TOKEN}
+      SAURON_RELATE_CAMERAS: cam-119
+      SAURON_RELATE_DEVICE: cuda
+    depends_on:
+      api:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: [gpu]
+    volumes:
+      - relate-models:/root/.cache
+    ports:
+      - "8093:8093"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8093/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 12
+      start_period: 10m
+
 volumes:
   timescale-data:
   redis-data:
-  alpr-models:
+  relate-models:
   minio-data:
   deepstream-engines:
-  deepstream-evidence:
+  alpr-models:
   prometheus-data:
+  track-models:

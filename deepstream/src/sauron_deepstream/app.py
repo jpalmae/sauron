@@ -8,7 +8,6 @@ import sys
 from .analytics import MetadataProcessor, make_metadata_operator
 from .bridge import RedisStreamBridge
 from .controller import SourceController
-from .evidence import EvidenceManager
 from .health import HealthServer
 from .metrics import Metrics
 from .registry import CameraRegistry
@@ -32,9 +31,13 @@ def run() -> None:
     metrics = Metrics()
     registry = CameraRegistry()
     bridge = RedisStreamBridge(settings.redis_url, metrics)
-    evidence = EvidenceManager(settings, registry, metrics)
+    allowed = {
+        c.strip().lower()
+        for c in os.environ.get("SAURON_DS_ALLOWED_CLASSES", "").split(",")
+        if c.strip()
+    }
     processor = MetadataProcessor(
-        registry, bridge, metrics, labels, settings.target_fps, evidence=evidence
+        registry, bridge, metrics, labels, settings.target_fps, allowed_classes=allowed
     )
 
     def restart_process() -> None:
@@ -128,7 +131,6 @@ def run() -> None:
                 log.info("source %s removed", message.source_id)
 
     bridge.start()
-    evidence.start()
     health.start()
     try:
         pipeline.prepare(on_message)
@@ -147,7 +149,6 @@ def run() -> None:
     finally:
         metrics.ready = False
         controller.stop()
-        evidence.stop()
         bridge.stop()
         health.stop()
 

@@ -12,10 +12,19 @@ export const CLASS_LABELS: Record<string, string> = {
   bus: "Bus",
   truck: "Camión",
   motorcycle: "Moto",
+  bicycle: "Bicicleta",
+  person: "Persona",
+  dog: "Perro",
+};
+
+export const DIRECTION_LABELS: Record<string, string> = {
+  forward: "ida",
+  reverse: "vuelta",
 };
 
 export const EVENT_LABELS: Record<string, string> = {
   LINE_CROSSING: "Cruce de línea",
+  RELATION: "Relación",
   STOPPED_VEHICLE: "Vehículo detenido",
   OBSTRUCTION: "Obstrucción",
   WRONG_WAY: "Sentido contrario",
