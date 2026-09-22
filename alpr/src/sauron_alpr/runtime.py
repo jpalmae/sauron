@@ -184,7 +184,6 @@ class ALPRRuntime:
         )
         self.model_ready = False
         self.model_error: str | None = None
-        self._ar_client: httpx.Client | None = None
         self.available_providers = ort.get_available_providers()
 
     def start(self) -> None:
@@ -207,40 +206,9 @@ class ALPRRuntime:
             raise
 
         self._event_client = httpx.Client(timeout=10)
-        if self.settings.vehicle_provider == "autoriesgo":
-            if self.settings.autoriesgo_key:
-                self._ar_client = httpx.Client(
-                    timeout=20,
-                    headers={"X-Api-Key": self.settings.autoriesgo_key},
-                )
-                log.info("vehicle lookup enabled via AutoRiesgo (keyed API)")
-            else:
-                log.warning("vehicle_provider=autoriesgo sin API key; lookup desactivado")
         if self.settings.vehicle_provider == "demo":
             log.info("vehicle lookup enabled in DEMO mode (datos sintéticos locales)")
-        elif self.settings.vehicle_provider == "matriculaapi":
-            if self.settings.matricula_username and self.settings.matricula_key:
-                # Las consultas en frío a SRCEI pueden tardar >20 s.
-                self._soap_client = httpx.Client(timeout=30)
-                log.info(
-                    "vehicle lookup enabled via matriculaapi (%s) — solo se envía la patente; "
-                    "cámaras: %s",
-                    self.settings.matricula_endpoint,
-                    self.settings.vehicle_cameras or "todas",
-                )
-            else:
-                log.warning(
-                    "vehicle_provider=matriculaapi sin credenciales; lookup desactivado"
-                )
-        elif self.settings.vehicle_api_key:
-            self._vehicle_client = httpx.Client(
-                timeout=3,
-                headers={
-                    "X-API-KEY": self.settings.vehicle_api_key,
-                    "accept": "application/json",
-                },
-            )
-            log.info("vehicle lookup enabled via %s", self.settings.vehicle_api_url)
+        self._ensure_vehicle_clients()
         os.environ.setdefault("OPENCV_FFMPEG_CAPTURE_OPTIONS", "rtsp_transport;tcp")
         inference = threading.Thread(target=self._inference_loop, name="alpr-inference", daemon=True)
         self._threads.append(inference)
@@ -288,12 +256,68 @@ class ALPRRuntime:
         for key in stale:
             self._last_event.pop(key, None)
 
+    def _ensure_vehicle_clients(self) -> None:
+        provider = self.settings.vehicle_provider
+        if provider == "boostr" and self.settings.vehicle_api_key:
+            if self._vehicle_client is None:
+                self._vehicle_client = httpx.Client(
+                    timeout=10,
+                    headers={
+                        "X-API-KEY": self.settings.vehicle_api_key,
+                        "accept": "application/json",
+                    },
+                )
+        elif (
+            provider == "matriculaapi"
+            and self.settings.matricula_username
+            and self.settings.matricula_key
+            and self._soap_client is None
+        ):
+            # Las consultas en frío a SRCEI pueden tardar >20 s.
+            self._soap_client = httpx.Client(timeout=30)
+
+    def _apply_runtime_config(self, cfg: dict[str, Any]) -> None:
+        mapping = {
+            "provider": "vehicle_provider",
+            "api_url": "vehicle_api_url",
+            "api_key": "vehicle_api_key",
+            "include_owner": "vehicle_include_owner",
+            "cameras": "vehicle_cameras",
+            "username": "matricula_username",
+            "license_key": "matricula_key",
+            "endpoint": "matricula_endpoint",
+            "operation": "matricula_operation",
+            "query_det_conf": "query_det_conf",
+            "query_ocr_conf": "query_ocr_conf",
+            "validate_plate": "validate_plate",
+            "region": "region",
+        }
+        applied = []
+        for key, attr in mapping.items():
+            if key in cfg:
+                value = cfg[key]
+                if isinstance(value, str):
+                    value = value.strip()
+                object.__setattr__(self.settings, attr, value)
+                applied.append(attr)
+        if applied:
+            self._ensure_vehicle_clients()
+            log.info("config API aplicada: %s", ", ".join(sorted(applied)))
+
     def _reconcile_loop(self) -> None:
         client = httpx.Client(
             timeout=10,
             headers={"Authorization": f"Bearer {self.settings.ingest_token}"},
         )
         while not self._stop.is_set():
+            try:
+                cfg_response = client.get(f"{self.settings.api_url}/alpr-config")
+                cfg_response.raise_for_status()
+                cfg = cfg_response.json()
+                if isinstance(cfg, dict) and cfg:
+                    self._apply_runtime_config(cfg)
+            except (httpx.HTTPError, ValueError, TypeError):
+                pass  # la config dinámica es opcional
             try:
                 response = client.get(f"{self.settings.api_url}/cameras/active")
                 response.raise_for_status()
@@ -302,12 +326,6 @@ class ALPRRuntime:
                     self._reconcile_cameras(payloads)
             except (httpx.HTTPError, ValueError, TypeError):
                 log.warning("camera reconciliation failed; keeping current set")
-            try:
-                cfg_response = client.get(f"{self.settings.api_url}/alpr-config")
-                cfg_response.raise_for_status()
-                self._apply_dynamic_config(cfg_response.json())
-            except (httpx.HTTPError, ValueError, TypeError):
-                pass
             self._stop.wait(self.settings.reconcile_seconds)
         client.close()
 
@@ -510,15 +528,6 @@ class ALPRRuntime:
                     state.inference_ms = inference_ms
                     state.detections = detections
                     state.jpeg = jpeg_bytes
-                if detections:
-                    for det in detections:
-                        log.info(
-                            "lectura cruda cam=%s plate=%r det=%.2f ocr=%.2f",
-                            spec.camera_id,
-                            det.get("plate"),
-                            det.get("detector_confidence", 0),
-                            det.get("ocr_confidence", 0),
-                        )
                 self._tracker.update(spec.camera_id, detections, jpeg_bytes, captured_at)
             except Exception as exc:
                 with state.lock:
@@ -604,12 +613,6 @@ class ALPRRuntime:
         jpeg: bytes,
     ) -> None:
         plate = detection["plate"]
-        log.info(
-            "emit intento cam=%s plate=%r len=%d ocr=%.4f det=%.4f ocr_min=%.2f cooldown_ago=%.1f",
-            camera_id, plate, len(plate), detection["ocr_confidence"], detection["detector_confidence"],
-            self.settings.ocr_confidence,
-            timestamp - self._last_event.get((camera_id, plate), 0.0),
-        )
         if not 5 <= len(plate) <= 8:
             return
         if detection["ocr_confidence"] < self.settings.ocr_confidence:
@@ -617,6 +620,7 @@ class ALPRRuntime:
         key = (camera_id, plate)
         if timestamp - self._last_event.get(key, 0.0) < self.settings.event_cooldown_s:
             return
+        self._last_event[key] = timestamp
         metadata = {
             "plate_text": plate,
             "detector_confidence": detection["detector_confidence"],
@@ -625,11 +629,11 @@ class ALPRRuntime:
             "box": detection["box"],
             "backend": "fast-alpr",
         }
-        # El filtro real es el perfil "matriculas" de cada cámara (reconciler);
-        # todas las cámaras ALPR consultan vehículo.
-        allowed: set[str] = set()
+        allowed = {
+            x.strip() for x in self.settings.vehicle_cameras.split(",") if x.strip()
+        }
         provider = self.settings.vehicle_provider
-        gate = self.settings.validate_plate and provider in ("boostr", "matriculaapi", "autoriesgo")
+        gate = self.settings.validate_plate and provider in ("boostr", "matriculaapi")
         # Consultar solo cuando YOLO y OCR dan el máximo: ahorra créditos.
         certain = (
             detection["ocr_confidence"] >= self.settings.query_ocr_conf
@@ -640,17 +644,11 @@ class ALPRRuntime:
             vehicle = self._vehicle_data(plate)
         if vehicle:
             metadata["vehicle"] = vehicle
-            # Cooldown completo solo para eventos válidos
-            self._last_event[key] = timestamp
         elif gate:
             # Regla: solo entran a eventos las placas confirmadas por la
-            # fuente oficial — el OCR solo no basta. Descartar arma un
-            # reintento breve: la lectura mejora al acercarse el vehículo.
-            self._last_event[key] = timestamp - self.settings.event_cooldown_s + 4.0
-            log.info("lectura %s no validada; reintento en 4 s", plate)
+            # fuente oficial (Registro Civil) — el OCR solo no basta.
+            log.info("lectura %s no validada por Registro Civil; evento descartado", plate)
             return
-        else:
-            self._last_event[key] = timestamp
         if self.settings.region:
             # El OCR global adivina la región por píxeles y suele errar; el
             # despliegue tiene una región conocida y esa manda.
@@ -682,24 +680,10 @@ class ALPRRuntime:
 
     def _vehicle_data(self, plate: str) -> dict[str, Any] | None:
         provider = self.settings.vehicle_provider
-        log.info("vehicle_data provider=%s plate=%s", provider, plate)
         if provider == "demo":
             data = self._demo_vehicle(plate)
             ttl = 7 * 86400 if data else 3600
             now = time.time()
-            with self._vehicle_cache_lock:
-                self._vehicle_cache[plate] = (now + ttl, data)
-            return data
-        if provider == "autoriesgo" and self._ar_client is not None:
-            now = time.time()
-            with self._vehicle_cache_lock:
-                cached = self._vehicle_cache.get(plate)
-                if cached and cached[0] > now:
-                    return cached[1]
-            self._lookup_stats["attempts"] += 1
-            data = self._fetch_vehicle_autoriesgo(plate)
-            self._lookup_stats["ok" if data else "empty"] += 1
-            ttl = 7 * 86400 if data else 3600
             with self._vehicle_cache_lock:
                 self._vehicle_cache[plate] = (now + ttl, data)
             return data
@@ -766,117 +750,6 @@ class ALPRRuntime:
         except (httpx.HTTPError, ValueError, SyntaxError):
             log.warning("matriculaapi lookup failed for %s", plate)
             return None, False
-
-    def _fetch_vehicle_autoriesgo(self, plate: str) -> dict[str, Any] | None:
-        assert self._ar_client is not None
-        try:
-            response = self._ar_client.get(
-                f"{self.settings.autoriesgo_endpoint}/{plate}?include_owner=true"
-            )
-            if response.status_code == 429:
-                log.warning("autoriesgo rate limit (5/min) para %s", plate)
-                return None
-            response.raise_for_status()
-            payload = response.json()
-        except (httpx.HTTPError, ValueError):
-            log.warning("autoriesgo lookup failed for %s", plate)
-            return None
-        if not isinstance(payload, dict) or not payload.get("found"):
-            return None
-        raw = payload.get("vehicle") or {}
-
-        def pick(*keys: str) -> Any:
-            for key in keys:
-                value = raw.get(key)
-                if value not in (None, ""):
-                    return value
-            return None
-
-        vehicle: dict[str, Any] = {
-            "plate": plate,
-            "provider": "autoriesgo",
-            "make": pick("make"),
-            "model": pick("model"),
-            "version": pick("version"),
-            "year": pick("year"),
-            "type": pick("type"),
-            "color": pick("color"),
-            "fuel": pick("gas_type"),
-            "engine": pick("engine"),
-            "engine_size": pick("engine_size"),
-            "transmission": pick("transmission"),
-            "kilometers": pick("kilometers"),
-            "dv": pick("dv"),
-            "vin": pick("chassis"),
-        }
-        owner = raw.get("owner")
-        if isinstance(owner, dict) and owner.get("fullname"):
-            vehicle["owner"] = {
-                "fullname": owner.get("fullname"),
-                "documentNumber": owner.get("documentNumber"),
-            }
-        prt = raw.get("prt")
-        if isinstance(prt, dict) and prt.get("status"):
-            vehicle["prt"] = {
-                "status": prt.get("status"),
-                "date": prt.get("date"),
-                "due_date": prt.get("due_date"),
-            }
-        return vehicle
-
-    _DYNAMIC_CONFIG_MAP = {
-        "provider": ("vehicle_provider", str),
-        "cameras": ("vehicle_cameras", str),
-        "username": ("matricula_username", str),
-        "license_key": ("matricula_key", str),
-        "endpoint": ("matricula_endpoint", str),
-        "operation": ("matricula_operation", str),
-        "query_det_conf": ("query_det_conf", float),
-        "query_ocr_conf": ("query_ocr_conf", float),
-        "validate_plate": ("validate_plate", bool),
-        "include_owner": ("vehicle_include_owner", bool),
-        "region": ("region", str),
-        "api_url": ("vehicle_api_url", str),
-        "api_key": ("vehicle_api_key", str),
-        "ar_api_key": ("autoriesgo_key", str),
-    }
-
-    def _apply_dynamic_config(self, payload: dict[str, Any]) -> None:
-        if not isinstance(payload, dict):
-            return
-        changed = False
-        for key, (attr, cast) in self._DYNAMIC_CONFIG_MAP.items():
-            value = payload.get(key)
-            if value in (None, ""):
-                continue
-            try:
-                casted = cast(value)
-            except (TypeError, ValueError):
-                continue
-            if getattr(self.settings, attr, None) != casted:
-                setattr(self.settings, attr, casted)
-                changed = True
-        if (
-            self.settings.vehicle_provider == "autoriesgo"
-            and self.settings.autoriesgo_key
-        ):
-            current = self._ar_client.headers.get("X-Api-Key") if self._ar_client else None
-            if current != self.settings.autoriesgo_key:
-                if self._ar_client is not None:
-                    self._ar_client.close()
-                self._ar_client = httpx.Client(
-                    timeout=20,
-                    headers={"X-Api-Key": self.settings.autoriesgo_key},
-                )
-                log.info("AutoRiesgo client (re)configurado dinámicamente")
-        if changed:
-            log.info(
-                "config dinámica aplicada: provider=%s gate=%s det=%.2f ocr=%.2f",
-                self.settings.vehicle_provider,
-                self.settings.validate_plate,
-                self.settings.query_det_conf,
-                self.settings.query_ocr_conf,
-            )
 
     @staticmethod
     def _parse_soap_vehicle(

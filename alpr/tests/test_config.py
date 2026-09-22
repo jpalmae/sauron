@@ -26,7 +26,6 @@ def make_settings(**overrides) -> Settings:
         "vehicle_api_key": "test-key",
         "vehicle_provider": "",
         "vehicle_cameras": "",
-        "validate_plate": False,
         "vehicle_include_owner": False,
         "matricula_username": "user",
         "matricula_key": "key",
@@ -321,48 +320,3 @@ def test_spec_from_payload_reads_alpr_zone():
     )
     assert spec is not None
     assert spec.crop == (1700, 900, 2800, 1520)
-
-
-def test_emit_gate_drops_unvalidated_plates():
-    runtime = ALPRRuntime(
-        make_settings(
-            vehicle_provider="matriculaapi",
-            validate_plate=True,
-            vehicle_api_key="k",
-            vehicle_cameras="",
-        )
-    )
-    runtime._vehicle_data = lambda plate: None  # RC no valida la placa
-    det = {
-        "plate": "5SMP26",
-        "ocr_confidence": 0.9,
-        "detector_confidence": 0.5,
-        "box": [0, 0, 100, 40],
-        "region": None,
-    }
-    runtime._maybe_emit_event("cam-214", 1000.0, det, b"jpg")
-    assert len(runtime._events) == 0
-    assert runtime._emit_queue.empty()
-
-
-def test_emit_gate_allows_validated_plates():
-    runtime = ALPRRuntime(
-        make_settings(
-            vehicle_provider="matriculaapi",
-            validate_plate=True,
-            vehicle_api_key="k",
-            vehicle_cameras="",
-        )
-    )
-    runtime._vehicle_data = lambda plate: {"make": "MAZDA", "provider": "matriculaapi"}
-    det = {
-        "plate": "HWFS33",
-        "ocr_confidence": 1.0,
-        "detector_confidence": 0.9,
-        "box": [0, 0, 100, 40],
-        "region": None,
-    }
-    runtime._maybe_emit_event("cam-214", 1000.0, det, b"jpg")
-    assert len(runtime._events) == 1
-    assert runtime._events[0]["metadata"]["vehicle"]["make"] == "MAZDA"
-    assert not runtime._emit_queue.empty() or True  # encolado para el worker

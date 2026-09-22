@@ -254,25 +254,6 @@ function ReadingDetail({
   const plate = String(reading.metadata?.plate_text ?? "—");
   const ocr = Number(reading.metadata?.ocr_confidence ?? 0);
   const region = reading.metadata?.region;
-  const [zoom, setZoom] = useState(false);
-  const [feedback, setFeedback] = useState<"correct" | "false_positive" | null>(null);
-
-  useEffect(() => {
-    if (!zoom) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.stopPropagation();
-        setZoom(false);
-      }
-    };
-    window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
-  }, [zoom]);
-
-  const markFeedback = (value: "correct" | "false_positive") => {
-    setFeedback(value);
-    onFeedback(reading.event_id, value);
-  };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -310,31 +291,11 @@ function ReadingDetail({
           <img
             src={reading.snapshot_url}
             alt="evidencia"
-            onClick={() => setZoom(true)}
-            className="w-full cursor-zoom-in rounded-lg border border-line"
+            className="w-full rounded-lg border border-line"
           />
         ) : (
           <div className="flex aspect-video w-full items-center justify-center rounded-lg border border-line bg-raised font-mono text-xs text-dim">
             sin evidencia
-          </div>
-        )}
-        {zoom && reading.snapshot_url && (
-          <div
-            className="fixed inset-0 z-[60] flex cursor-zoom-out items-center justify-center bg-black/95 p-4"
-            onClick={() => setZoom(false)}
-          >
-            <img
-              src={reading.snapshot_url}
-              alt="evidencia ampliada"
-              className="max-h-full max-w-full object-contain"
-            />
-            <button
-              onClick={() => setZoom(false)}
-              className="absolute right-5 top-5 rounded-md border border-white/20 bg-black/60 p-2 text-white/80 hover:text-white"
-              aria-label="cerrar zoom"
-            >
-              <X size={18} />
-            </button>
           </div>
         )}
         {reading.metadata?.vehicle ? (
@@ -384,28 +345,17 @@ function ReadingDetail({
           )}
           <span className="font-mono text-[10px] text-dim">¿lectura correcta?</span>
           <button
-            onClick={() => markFeedback("correct")}
-            className={`rounded border px-2.5 py-1 text-xs transition-colors ${
-              feedback === "correct"
-                ? "border-info bg-info/10 text-info"
-                : "border-line text-mut hover:border-info hover:text-info"
-            }`}
+            onClick={() => onFeedback(reading.event_id, "correct")}
+            className="rounded border border-line px-2.5 py-1 text-xs text-mut transition-colors hover:border-info hover:text-info"
           >
             sí
           </button>
           <button
-            onClick={() => markFeedback("false_positive")}
-            className={`rounded border px-2.5 py-1 text-xs transition-colors ${
-              feedback === "false_positive"
-                ? "border-crit bg-crit/10 text-crit"
-                : "border-line text-mut hover:border-crit hover:text-crit"
-            }`}
+            onClick={() => onFeedback(reading.event_id, "false_positive")}
+            className="rounded border border-line px-2.5 py-1 text-xs text-mut transition-colors hover:border-crit hover:text-crit"
           >
             falso positivo
           </button>
-          {feedback && (
-            <span className="font-mono text-[10px] text-info">✓ registrado</span>
-          )}
         </div>
       </div>
     </div>
