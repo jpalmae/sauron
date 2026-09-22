@@ -20,6 +20,14 @@ async def get_or_create_camera(session: AsyncSession, stream_id: str) -> Camera:
     result = await session.execute(select(Camera).where(Camera.stream_id == stream_id))
     camera = result.scalar_one_or_none()
     if camera is None:
+        try:
+            uid = uuid.UUID(stream_id)
+        except ValueError:
+            uid = None
+        if uid is not None:
+            result = await session.execute(select(Camera).where(Camera.id == uid))
+            camera = result.scalar_one_or_none()
+    if camera is None:
         camera = Camera(name=stream_id, stream_id=stream_id)
         session.add(camera)
         await session.flush()

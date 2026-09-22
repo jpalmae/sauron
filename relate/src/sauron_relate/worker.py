@@ -216,9 +216,7 @@ class RelateWorker:
         self, stream: str, sub: dict, predicate: str, obj: dict,
         score: float, jpeg: bytes | None, ts: float,
     ) -> None:
-        camera_id = self._camera_uuid.get(stream)
-        if camera_id is None:
-            return
+        camera_id = stream
         payload = {
             "event_type": "RELATION",
             "camera_id": camera_id,
