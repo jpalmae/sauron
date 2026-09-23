@@ -105,10 +105,34 @@ function WhepVideo({ url, onState }: { url: string; onState: (s: TileState) => v
   return <video ref={videoRef} autoPlay muted playsInline className="aspect-video w-full object-cover" />;
 }
 
-function LiveTile({ camera, onOpen }: { camera: Camera; onOpen?: (c: Camera) => void }) {
+const OFFLINE_RETRY_MS = 20000;
+
+function LiveTile({
+  camera,
+  onOpen,
+  onStateChange,
+}: {
+  camera: Camera;
+  onOpen?: (c: Camera) => void;
+  onStateChange?: (id: string, s: TileState) => void;
+}) {
   const [source, setSource] = useState<{ kind: string; url: string } | null>(null);
-  const [state, setState] = useState<TileState>("connecting");
+  const [stateRaw, setStateRaw] = useState<TileState>("connecting");
   const [analyticsState, setAnalyticsState] = useState<AnalyticsState>("connecting");
+  const [retry, setRetry] = useState(0);
+
+  const setState = (s: TileState) => {
+    setStateRaw(s);
+    onStateChange?.(camera.id, s);
+  };
+  const state = stateRaw;
+
+  // reintento automatico: la camara vuelve a intentar conectarse cada 20s
+  useEffect(() => {
+    if (state !== "offline") return;
+    const t = setTimeout(() => setRetry((r) => r + 1), OFFLINE_RETRY_MS);
+    return () => clearTimeout(t);
+  }, [state, retry]);
 
   useEffect(() => {
     let alive = true;
@@ -123,7 +147,26 @@ function LiveTile({ camera, onOpen }: { camera: Camera; onOpen?: (c: Camera) => 
     return () => {
       alive = false;
     };
-  }, [camera.stream_id]);
+  }, [camera.stream_id, retry]);
+
+  // offline: recuadro compacto; el player queda montado oculto reintentando
+  if (state === "offline") {
+    return (
+      <div
+        className="flex cursor-pointer items-center gap-2 rounded-lg border border-line/60 bg-panel/60 px-3 py-2.5 transition-colors hover:border-brand/40"
+        onClick={() => onOpen?.(camera)}
+        role="status"
+      >
+        <CameraOff size={14} className="shrink-0 text-crit" strokeWidth={1.5} />
+        <span className="truncate font-display text-xs text-mut">{camera.name}</span>
+        <span className="ml-auto shrink-0 font-mono text-[10px] text-crit">offline</span>
+        <div className="hidden">
+          {source?.kind === "hls" && <HlsVideo key={retry} url={source.url} onState={setState} />}
+          {source?.kind === "whep" && <WhepVideo key={retry} url={source.url} onState={setState} />}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -131,8 +174,8 @@ function LiveTile({ camera, onOpen }: { camera: Camera; onOpen?: (c: Camera) => 
       onClick={() => onOpen?.(camera)}
     >
       <DetectionsOverlay cameraId={camera.id} onState={setAnalyticsState} profile={camera.analytics_profile} />
-      {source?.kind === "hls" && <HlsVideo url={source.url} onState={setState} />}
-      {source?.kind === "whep" && <WhepVideo url={source.url} onState={setState} />}
+      {source?.kind === "hls" && <HlsVideo key={retry} url={source.url} onState={setState} />}
+      {source?.kind === "whep" && <WhepVideo key={retry} url={source.url} onState={setState} />}
       {(!source || state !== "live") && (
         <div className="absolute inset-0 grid place-items-center bg-[repeating-linear-gradient(45deg,transparent,transparent_10px,var(--color-panel)_10px,var(--color-panel)_20px)]">
           <div className="flex flex-col items-center gap-2 text-dim">
@@ -179,7 +222,13 @@ function LiveTile({ camera, onOpen }: { camera: Camera; onOpen?: (c: Camera) => 
 
 export default function CameraGrid({ cameras }: { cameras: Camera[] }) {
   const [openCam, setOpenCam] = useState<Camera | null>(null);
+  const [states, setStates] = useState<Record<string, TileState>>({});
+  const onStateChange = (id: string, s: TileState) =>
+    setStates((prev) => (prev[id] === s ? prev : { ...prev, [id]: s }));
   const active = cameras.filter((c) => c.is_active);
+  // sin senal al fondo: las que reportan offline van a la zona compacta
+  const online = active.filter((c) => states[c.id] !== "offline");
+  const offline = active.filter((c) => states[c.id] === "offline");
   if (active.length === 0) {
     return (
       <div className="grid h-full place-items-center">
@@ -194,18 +243,27 @@ export default function CameraGrid({ cameras }: { cameras: Camera[] }) {
     );
   }
   return (
-    <div
-      className={`grid gap-3 ${
-        active.length === 1
-          ? "grid-cols-1"
-          : active.length <= 4
-            ? "grid-cols-1 lg:grid-cols-2"
-            : "grid-cols-1 md:grid-cols-2 xl:grid-cols-3"
-      }`}
-    >
-      {active.map((cam) => (
-        <LiveTile key={cam.id} camera={cam} onOpen={setOpenCam} />
-      ))}
+    <div>
+      <div
+        className={`grid gap-3 ${
+          online.length === 1
+            ? "grid-cols-1"
+            : online.length <= 4
+              ? "grid-cols-1 lg:grid-cols-2"
+              : "grid-cols-1 md:grid-cols-2 xl:grid-cols-3"
+        }`}
+      >
+        {online.map((cam) => (
+          <LiveTile key={cam.id} camera={cam} onOpen={setOpenCam} onStateChange={onStateChange} />
+        ))}
+      </div>
+      {offline.length > 0 && (
+        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+          {offline.map((cam) => (
+            <LiveTile key={cam.id} camera={cam} onOpen={setOpenCam} onStateChange={onStateChange} />
+          ))}
+        </div>
+      )}
       {openCam && (
         <CameraModal camera={openCam} onClose={() => setOpenCam(null)} />
       )}
