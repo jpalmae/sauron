@@ -84,6 +84,7 @@ export default function Layout({ wsConnected }: { wsConnected: boolean }) {
           <Section label="Personas" icon={Users} color="text-warn" defaultOpen>
             <NavItem to="/people/live" label="En vivo" icon={Video} />
             <NavItem to="/people/analytics" label="Analítica" icon={ChartColumn} />
+            <NavItem to="/people/occupancy" label="Ocupación" icon={Activity} />
             <NavItem to="/people/events" label="Eventos" icon={ScrollText} />
           </Section>
           <div className="my-1 border-t border-line/60" />

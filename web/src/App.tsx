@@ -10,6 +10,7 @@ import CamerasPage from "./pages/CamerasPage";
 import Dashboard from "./pages/Dashboard";
 import EventsPage from "./pages/EventsPage";
 import LivePage from "./pages/LivePage";
+import OccupancyPage from "./pages/OccupancyPage";
 import LoginPage from "./pages/LoginPage";
 import MapPage from "./pages/MapPage";
 import NotificationsPage from "./pages/NotificationsPage";
@@ -44,6 +45,7 @@ export default function App() {
           <Route path="people/live" element={<LivePage onWsState={setWsConnected} domain="people" />} />
           <Route path="people/analytics" element={<AnalyticsPage domain="people" />} />
           <Route path="people/events" element={<EventsPage domain="people" />} />
+          <Route path="people/occupancy" element={<OccupancyPage />} />
           <Route path="analytics" element={<Navigate to="/traffic/analytics" replace />} />
           <Route path="events" element={<Navigate to="/traffic/events" replace />} />
           <Route path="search" element={<SearchPage />} />

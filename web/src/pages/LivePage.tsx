@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import AlertPanel, { type AlertEntry } from "../components/AlertPanel";
 import CameraGrid from "../components/CameraGrid";
-import OccupancyWidget from "../components/OccupancyWidget";
 import { api, type Camera } from "../lib/api";
 import { playAlertPing } from "../lib/audio";
 import { filterCamerasByDomain, filterEventsByDomain, type Domain, isPeopleEvent, isTrafficEvent } from "../lib/domain";
@@ -95,13 +94,6 @@ export default function LivePage({
   return (
     <div className="flex h-full">
       <div className="min-w-0 flex-1 overflow-y-auto p-4">
-        {domain === "people" && filteredCameras.length > 0 && (
-          <div className="mb-3 grid gap-3 lg:grid-cols-2">
-            {filteredCameras.map((c) => (
-              <OccupancyWidget key={c.id} cameraId={c.id} name={c.name} />
-            ))}
-          </div>
-        )}
         <CameraGrid cameras={filteredCameras} />
         {filteredCameras.length === 0 && (
           <p className="mt-6 text-center text-sm text-dim">
