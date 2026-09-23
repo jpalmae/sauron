@@ -5,9 +5,11 @@ import { api, type OccupancyStats } from "../lib/api";
 export default function OccupancyWidget({
   cameraId,
   name,
+  onStateChange,
 }: {
   cameraId: string;
   name: string;
+  onStateChange?: (cameraId: string, ok: boolean) => void;
 }) {
   const [s, setS] = useState<OccupancyStats | null>(null);
 
@@ -16,8 +18,13 @@ export default function OccupancyWidget({
     const load = () =>
       api
         .occupancy(cameraId)
-        .then((d) => alive && setS(d))
-        .catch(() => {});
+        .then((d) => {
+          if (!alive) return;
+          setS(d);
+          // sin datos reales (camara caida): el endpoint responde todo null
+          onStateChange?.(cameraId, d != null && d.count != null);
+        })
+        .catch(() => alive && onStateChange?.(cameraId, false));
     load();
     const t = setInterval(load, 10_000);
     return () => {
