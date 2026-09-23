@@ -1,4 +1,4 @@
-import { Activity, Maximize2, X } from "lucide-react";
+import { Activity, CameraOff, Maximize2, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, auth, type AlprCamera, type EventItem } from "../lib/api";
 import { fmtDateTime } from "../lib/format";
@@ -582,18 +582,49 @@ export default function AlprPage() {
               : `${live}/${cameras.length} en vivo${plates > 0 ? ` · ${plates} placa${plates === 1 ? "" : "s"} en cuadro` : ""}`}
           </div>
         </div>
-        <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
-          {cameras.map((c) => (
-            <CameraCard
-              key={c.camera_id}
-              camera={c}
-              name={names[c.camera_id] ?? c.camera_id}
-              active={streaming.has(c.camera_id)}
-              onInView={handleInView}
-              onMaximize={setMaximized}
-            />
-          ))}
-        </div>
+        {(() => {
+          // mismo criterio que En vivo: sin senal al fondo y compactas
+          const isOnline = (st: string) =>
+            st === "live" || st === "waiting-inference" || st === "connecting";
+          const onlineCams = cameras.filter((c) => isOnline(c.status));
+          const offlineCams = cameras.filter((c) => !isOnline(c.status));
+          return (
+            <>
+              <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
+                {onlineCams.map((c) => (
+                  <CameraCard
+                    key={c.camera_id}
+                    camera={c}
+                    name={names[c.camera_id] ?? c.camera_id}
+                    active={streaming.has(c.camera_id)}
+                    onInView={handleInView}
+                    onMaximize={setMaximized}
+                  />
+                ))}
+              </div>
+              {offlineCams.length > 0 && (
+                <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                  {offlineCams.map((c) => (
+                    <div
+                      key={c.camera_id}
+                      onClick={() => setMaximized(c.camera_id)}
+                      className="flex cursor-pointer items-center gap-2 rounded-lg border border-line/60 bg-panel/60 px-3 py-2.5 transition-colors hover:border-brand/40"
+                      role="status"
+                    >
+                      <CameraOff size={14} className="shrink-0 text-crit" strokeWidth={1.5} />
+                      <span className="truncate font-display text-xs text-mut">
+                        {names[c.camera_id] ?? c.camera_id}
+                      </span>
+                      <span className="ml-auto shrink-0 font-mono text-[10px] text-crit">
+                        {STATUS_LABEL[c.status] ?? "offline"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          );
+        })()}
         {!error && cameras.length === 0 && (
           <p className="mt-6 text-center text-sm text-dim">
             Servicio ALPR sin cámaras configuradas.
