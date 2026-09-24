@@ -148,10 +148,9 @@ class _LineCrossing:
 
 
 class _Stopped:
-    def __init__(self, config: PolygonConfig, seat_zones: list | None = None) -> None:
+    def __init__(self, config: PolygonConfig) -> None:
         self.config = config
         self.polygon = np.asarray(config.points, dtype=np.float64)
-        self._seat_zones = seat_zones or []
         self._since: dict[int, float] = {}
         self._alerted: set[int] = set()
 
@@ -311,9 +310,10 @@ class _Congestion:
 class _Occupancy:
     """Periodic people occupancy derived from TrafficCamNet + NvDCF tracks."""
 
-    def __init__(self, config: PolygonConfig) -> None:
+    def __init__(self, config: PolygonConfig, seat_zones: list | None = None) -> None:
         self.config = config
         self.polygon = np.asarray(config.points, dtype=np.float64)
+        self._seat_zones = seat_zones or []
         self._first_seen: dict[int, float] = {}
         self._seen: set[int] = set()
         self._peak = 0
