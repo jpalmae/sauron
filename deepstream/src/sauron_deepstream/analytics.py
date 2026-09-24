@@ -10,6 +10,7 @@ from .domain import Frame, TrackedObject
 from .metrics import Metrics
 from .registry import Camera, CameraRegistry
 from .rules import RulesEngine
+import math
 
 
 @dataclass(slots=True)
@@ -135,7 +136,27 @@ class MetadataProcessor:
         self._tracks = TrackAssembler(labels, fps, allowed_classes=allowed_classes)
         self._engines: dict[str, tuple[str, RulesEngine]] = {}
         self._vehicle_types: dict[tuple[str, int], str] = {}
+        self._posture_hist: dict[tuple[str, int], list[float]] = {}
         self._vehicle_type_seen: dict[tuple[str, int], float] = {}
+
+    def _posture(self, stream_id: str, track, fps: int) -> str | None:
+        """sentada (caja ancha) / moving (rapida) / standing — None si no es persona."""
+        if track.class_name.lower() not in {"person", "persons"}:
+            return None
+        height_px = max(1.0, track.bbox[3] - track.bbox[1])
+        width_px = max(1.0, track.bbox[2] - track.bbox[0])
+        aspect = height_px / width_px
+        speed_px_s = math.hypot(*track.velocity) * max(fps, 1)
+        rel = speed_px_s / height_px
+        key = (stream_id, track.object_id)
+        hist = self._posture_hist.setdefault(key, [])
+        hist.append(rel)
+        if len(hist) > 5:
+            del hist[0]
+        avg_rel = sum(hist) / len(hist)
+        if aspect < 1.25:
+            return "sitting"
+        return "moving" if avg_rel > 0.3 else "standing"
 
     def process_batch(self, batch_meta: Any) -> None:
         for frame_meta in batch_meta.frame_items:
@@ -186,6 +207,7 @@ class MetadataProcessor:
                             "vehicle_type": self._vehicle_types.get(
                                 (camera.stream_id, track.object_id)
                             ),
+                            "posture": self._posture(camera.stream_id, track, self._fps),
                             "box": [
                                 track.bbox[0] / width,
                                 track.bbox[1] / height,

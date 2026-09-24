@@ -8,10 +8,12 @@ const EDGES: [number, number][] = [
   [11, 13], [13, 15], [12, 14], [14, 16], // legs
 ];
 
+// paleta: sentada verde, caminando morado, de pie rojo
 const POSTURE_COLOR: Record<string, string> = {
-  standing: "#22c55e",
-  sitting: "#3b82f6",
-  fallen: "#ef4444",
+  sitting: "#22c55e",
+  moving: "#a855f7",
+  standing: "#ef4444",
+  fallen: "#f97316",
   unknown: "#eab308",
 };
 

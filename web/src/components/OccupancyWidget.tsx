@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Clock, Footprints, Hash, PersonStanding, TrendingUp, Users } from "lucide-react";
+import { Armchair, Clock, Footprints, Hash, PersonStanding, TrendingUp, Users } from "lucide-react";
 import { api, type OccupancyStats } from "../lib/api";
 
 export default function OccupancyWidget({
@@ -36,6 +36,7 @@ export default function OccupancyWidget({
   const rows: { icon: typeof Users; label: string; value: string | number }[] = [
     { icon: Users, label: "Ahora", value: s?.count ?? "—" },
     { icon: PersonStanding, label: "Paradas", value: s?.standing ?? "—" },
+    { icon: Armchair, label: "Sentadas", value: s?.sitting ?? "—" },
     { icon: Footprints, label: "En mov.", value: s?.moving ?? "—" },
     { icon: TrendingUp, label: "Pico hoy", value: s?.peak_today ?? s?.peak ?? "—" },
     { icon: Hash, label: "Únicos", value: s?.unique_total ?? "—" },

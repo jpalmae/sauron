@@ -336,8 +336,13 @@ class _Occupancy:
         count = len(people)
         standing = 0
         moving = 0
+        sitting = 0
         for track in people:
             height_px = max(1.0, track.bbox[3] - track.bbox[1])
+            width_px = max(1.0, track.bbox[2] - track.bbox[0])
+            if height_px / width_px < 1.25:
+                sitting += 1
+                continue
             speed_px_s = math.hypot(*track.velocity) * fps
             rel = speed_px_s / height_px
             hist = self._speed_hist.setdefault(track.object_id, deque(maxlen=5))
@@ -370,6 +375,7 @@ class _Occupancy:
                     "count": count,
                     "standing": standing,
                     "moving": moving,
+                    "sitting": sitting,
                     "by_class": {"person": count},
                     "unique_total": len(self._seen),
                     "avg_dwell_s": round(avg_dwell, 1),
