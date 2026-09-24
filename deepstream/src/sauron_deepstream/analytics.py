@@ -9,7 +9,7 @@ from .bridge import RedisStreamBridge
 from .domain import Frame, TrackedObject
 from .metrics import Metrics
 from .registry import Camera, CameraRegistry
-from .rules import RulesEngine
+from .rules import RulesEngine, _inside
 import math
 
 
@@ -138,10 +138,12 @@ class MetadataProcessor:
         self._vehicle_types: dict[tuple[str, int], str] = {}
         self._posture_hist: dict[tuple[str, int], list[float]] = {}
         self._fps_est: dict[str, tuple[float, int, float]] = {}
+        self._seat_zones: dict[str, list] = {}
+        self._sitting_since: dict[tuple[str, int], float] = {}
         self._vehicle_type_seen: dict[tuple[str, int], float] = {}
 
-    def _posture(self, stream_id: str, track, fps: float) -> str | None:
-        """sentada (caja ancha) / moving (rapida) / standing — None si no es persona."""
+    def _posture(self, stream_id: str, track, fps: float, timestamp: float = 0.0) -> str | None:
+        """sentada (zona de asiento) / moving (rapida) / standing — None si no es persona."""
         if track.class_name.lower() not in {"person", "persons"}:
             return None
         height_px = max(1.0, track.bbox[3] - track.bbox[1])
@@ -157,8 +159,17 @@ class MetadataProcessor:
         if len(hist) > 5:
             del hist[0]
         avg_rel = sum(hist) / len(hist)
-        # personas lejanas (caja chica) tienen aspecto ruidoso: no clasificar sentadas
-        if aspect < 1.25 and height_px >= 50:
+
+        # sentada por zona de asiento (feet = base de la caja dentro del poligono)
+        zones = self._seat_zones.get(stream_id) or []
+        if zones:
+            feet = ((track.bbox[0] + track.bbox[2]) / 2.0, track.bbox[3])
+            if any(_inside(feet, z) for z in zones):
+                first = self._sitting_since.setdefault(key, timestamp)
+                return "sitting" if timestamp - first >= 2.0 else "standing"
+            self._sitting_since.pop(key, None)
+        elif aspect < 1.25 and height_px >= 50:
+            # fallback sin zonas: persona agachada/sentada a media distancia
             return "sitting"
         return "moving" if avg_rel > 0.3 else "standing"
 
@@ -226,7 +237,7 @@ class MetadataProcessor:
                             "vehicle_type": self._vehicle_types.get(
                                 (camera.stream_id, track.object_id)
                             ),
-                            "posture": self._posture(camera.stream_id, track, fps_cam),
+                            "posture": self._posture(camera.stream_id, track, fps_cam, timestamp),
                             "box": [
                                 track.bbox[0] / width,
                                 track.bbox[1] / height,
@@ -267,6 +278,11 @@ class MetadataProcessor:
             # zero-copy traffic pipeline. It can be added later as a gated
             # secondary branch without slowing every camera.
             roi.alpr = None
+            self._seat_zones[camera.stream_id] = [
+                np.asarray(p.points, dtype=np.float64)
+                for p in roi.polygons
+                if p.kind == "seat"
+            ]
             current = (
                 fingerprint,
                 RulesEngine(

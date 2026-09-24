@@ -470,6 +470,7 @@ export default function RoiConfiguratorPage() {
                     <option value="lane">carril</option>
                     <option value="parking">estacionamiento</option>
                     <option value="counting">conteo</option>
+                    <option value="seat">asientos</option>
                   </select>
                 </div>
                 <div className="mt-2 flex flex-wrap gap-2">

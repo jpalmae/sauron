@@ -40,7 +40,7 @@ class LineConfig(BaseModel):
 class PolygonConfig(BaseModel):
     id: str
     points: list[Point]
-    kind: Literal["lane", "parking", "counting"] = "lane"
+    kind: Literal["lane", "parking", "counting", "seat"] = "lane"
     rules: list[PolygonRuleName] = Field(default_factory=_default_polygon_rules)
     direction: Point | None = None
 

@@ -140,7 +140,7 @@ export interface RoiLine {
 export interface RoiPolygon {
   id: string;
   points: [number, number][];
-  kind?: "lane" | "parking" | "counting";
+  kind?: "lane" | "parking" | "counting" | "seat";
   rules?: ("stopped" | "wrong_way" | "congestion" | "occupancy")[];
   direction?: [number, number] | null;
 }

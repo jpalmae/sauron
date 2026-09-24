@@ -148,9 +148,10 @@ class _LineCrossing:
 
 
 class _Stopped:
-    def __init__(self, config: PolygonConfig) -> None:
+    def __init__(self, config: PolygonConfig, seat_zones: list | None = None) -> None:
         self.config = config
         self.polygon = np.asarray(config.points, dtype=np.float64)
+        self._seat_zones = seat_zones or []
         self._since: dict[int, float] = {}
         self._alerted: set[int] = set()
 
@@ -340,7 +341,10 @@ class _Occupancy:
         for track in people:
             height_px = max(1.0, track.bbox[3] - track.bbox[1])
             width_px = max(1.0, track.bbox[2] - track.bbox[0])
-            if height_px / width_px < 1.25:
+            feet = ((track.bbox[0] + track.bbox[2]) / 2.0, track.bbox[3])
+            if any(_inside(feet, z) for z in self._seat_zones) or (
+                not self._seat_zones and height_px / width_px < 1.25
+            ):
                 sitting += 1
                 continue
             speed_px_s = math.hypot(*track.velocity) * fps
@@ -394,11 +398,16 @@ class RulesEngine:
         self.thresholds = roi.thresholds
         self.speed = SpeedEstimator(roi.homography) if roi.homography else None
         self.rules: list[_Rule] = [_LineCrossing(config) for config in roi.lines]
+        seat_zones = [
+            np.asarray(p.points, dtype=np.float64)
+            for p in roi.polygons
+            if p.kind == "seat"
+        ]
         factories: dict[str, Callable[[PolygonConfig], _Rule]] = {
             "stopped": _Stopped,
             "wrong_way": _WrongWay,
             "congestion": _Congestion,
-            "occupancy": _Occupancy,
+            "occupancy": lambda poly: _Occupancy(poly, seat_zones=seat_zones),
         }
         for polygon in roi.polygons:
             for name in polygon.rules:
