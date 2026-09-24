@@ -220,15 +220,37 @@ function LiveTile({
   );
 }
 
+const DEMOTE_AFTER_MS = 15000;
+
 export default function CameraGrid({ cameras }: { cameras: Camera[] }) {
   const [openCam, setOpenCam] = useState<Camera | null>(null);
   const [states, setStates] = useState<Record<string, TileState>>({});
-  const onStateChange = (id: string, s: TileState) =>
+  const [offlineSince, setOfflineSince] = useState<Record<string, number>>({});
+  const [, setTick] = useState(0);
+  // re-evaluar la democion diferida aunque no cambie ningun estado
+  useEffect(() => {
+    const t = setInterval(() => setTick((x) => x + 1), 5000);
+    return () => clearInterval(t);
+  }, []);
+  const onStateChange = (id: string, s: TileState) => {
     setStates((prev) => (prev[id] === s ? prev : { ...prev, [id]: s }));
+    setOfflineSince((prev) => {
+      if (s !== "offline") {
+        if (!prev[id]) return prev;
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      }
+      return prev[id] ? prev : { ...prev, [id]: Date.now() };
+    });
+  };
   const active = cameras.filter((c) => c.is_active);
-  // sin senal al fondo: las que reportan offline van a la zona compacta
-  const online = active.filter((c) => states[c.id] !== "offline");
-  const offline = active.filter((c) => states[c.id] === "offline");
+  // histeresis: solo baja al fondo si lleva 15 s caida (evita pestañeo
+  // por microcortes de WebRTC); al recuperar sube de inmediato
+  const demoted = (id: string) =>
+    states[id] === "offline" && Date.now() - (offlineSince[id] ?? Date.now()) >= DEMOTE_AFTER_MS;
+  const online = active.filter((c) => !demoted(c.id));
+  const offline = active.filter((c) => demoted(c.id));
   if (active.length === 0) {
     return (
       <div className="grid h-full place-items-center">
