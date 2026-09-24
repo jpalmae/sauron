@@ -23,7 +23,7 @@ export type AnalyticsState = "connecting" | "live" | "stale" | "unavailable";
 const DR_HORIZON_S = 2.5; // no extrapolar mas alla de 2.5 s sin datos frescos
 // Latencia del reproductor de video (WHEP) respecto al tiempo real: los
 // recuadros se dibujan en la posicion estimada para ese instante del video.
-const VIDEO_LATENCY_S = 0.45;
+const VIDEO_LATENCY_S = 0.65;
 // Suavizado del render: velocidad con la que el recuadro persigue su
 // posicion proyectada (por segundo). Mayor = sigue mas rapido.
 const CHASE_RATE = 10;

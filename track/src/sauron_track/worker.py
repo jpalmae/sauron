@@ -235,7 +235,7 @@ class TrackWorker:
         """ffmpeg con decode NVDEC: 1080p HEVC ~gratis (frame.jpeg costaba 1.6s)."""
         cmd = [
             "ffmpeg", "-hide_banner", "-loglevel", "error",
-            "-hwaccel", "cuda", "-rtsp_transport", "tcp",
+            "-hwaccel", "cuda", "-rtsp_transport", "tcp", "-fflags", "nobuffer", "-flags", "low_delay",
             "-i", f"rtsp://go2rtc:8554/{src_stream}",
             "-an", "-vf", "fps=8", "-f", "image2pipe",
             "-vcodec", "mjpeg", "-q:v", "4", "-",
