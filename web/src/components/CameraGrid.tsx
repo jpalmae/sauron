@@ -1,6 +1,6 @@
 import Hls from "hls.js";
 import { CameraOff, Maximize2 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api, auth, type Camera } from "../lib/api";
 import DetectionsOverlay, { type AnalyticsState } from "./DetectionsOverlay";
 
@@ -121,10 +121,14 @@ function LiveTile({
   const [analyticsState, setAnalyticsState] = useState<AnalyticsState>("connecting");
   const [retry, setRetry] = useState(0);
 
-  const setState = (s: TileState) => {
-    setStateRaw(s);
-    onStateChange?.(camera.id, s);
-  };
+  // estable: si se recrea en cada render, el player se reconecta en cascada
+  const setState = useCallback(
+    (s: TileState) => {
+      setStateRaw(s);
+      onStateChange?.(camera.id, s);
+    },
+    [camera.id, onStateChange],
+  );
   const state = stateRaw;
 
   // reintento automatico: la camara vuelve a intentar conectarse cada 20s
@@ -232,7 +236,7 @@ export default function CameraGrid({ cameras }: { cameras: Camera[] }) {
     const t = setInterval(() => setTick((x) => x + 1), 5000);
     return () => clearInterval(t);
   }, []);
-  const onStateChange = (id: string, s: TileState) => {
+  const onStateChange = useCallback((id: string, s: TileState) => {
     setStates((prev) => (prev[id] === s ? prev : { ...prev, [id]: s }));
     setOfflineSince((prev) => {
       if (s !== "offline") {
@@ -243,7 +247,7 @@ export default function CameraGrid({ cameras }: { cameras: Camera[] }) {
       }
       return prev[id] ? prev : { ...prev, [id]: Date.now() };
     });
-  };
+  }, []);
   const active = cameras.filter((c) => c.is_active);
   // histeresis: solo baja al fondo si lleva 15 s caida (evita pestañeo
   // por microcortes de WebRTC); al recuperar sube de inmediato
