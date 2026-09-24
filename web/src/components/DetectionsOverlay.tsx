@@ -11,7 +11,7 @@ const EDGES: [number, number][] = [
 // paleta: sentada verde, caminando morado, de pie rojo
 const POSTURE_COLOR: Record<string, string> = {
   sitting: "#22c55e",
-  moving: "#a855f7",
+  moving: "#d946ef",
   standing: "#ef4444",
   fallen: "#f97316",
   unknown: "#eab308",

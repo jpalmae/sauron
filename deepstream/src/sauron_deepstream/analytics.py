@@ -137,16 +137,19 @@ class MetadataProcessor:
         self._engines: dict[str, tuple[str, RulesEngine]] = {}
         self._vehicle_types: dict[tuple[str, int], str] = {}
         self._posture_hist: dict[tuple[str, int], list[float]] = {}
+        self._fps_est: dict[str, tuple[float, int, float]] = {}
         self._vehicle_type_seen: dict[tuple[str, int], float] = {}
 
-    def _posture(self, stream_id: str, track, fps: int) -> str | None:
+    def _posture(self, stream_id: str, track, fps: float) -> str | None:
         """sentada (caja ancha) / moving (rapida) / standing — None si no es persona."""
         if track.class_name.lower() not in {"person", "persons"}:
             return None
         height_px = max(1.0, track.bbox[3] - track.bbox[1])
         width_px = max(1.0, track.bbox[2] - track.bbox[0])
         aspect = height_px / width_px
-        speed_px_s = math.hypot(*track.velocity) * max(fps, 1)
+        # fps real de la camara: la velocidad viene en px/frame y multiplicar
+        # por el fps objetivo sobreestima cuando la camara corre mas lento
+        speed_px_s = math.hypot(*track.velocity) * max(fps, 1.0)
         rel = speed_px_s / height_px
         key = (stream_id, track.object_id)
         hist = self._posture_hist.setdefault(key, [])
@@ -154,9 +157,24 @@ class MetadataProcessor:
         if len(hist) > 5:
             del hist[0]
         avg_rel = sum(hist) / len(hist)
-        if aspect < 1.25:
+        # personas lejanas (caja chica) tienen aspecto ruidoso: no clasificar sentadas
+        if aspect < 1.25 and height_px >= 50:
             return "sitting"
         return "moving" if avg_rel > 0.3 else "standing"
+
+    def _camera_fps(self, stream_id: str, frame_number: int, timestamp: float) -> float:
+        prev = self._fps_est.get(stream_id)
+        if prev is None:
+            self._fps_est[stream_id] = (timestamp, frame_number, 0.0)
+            return float(self._fps)
+        pts, pfno, est = prev
+        dt = timestamp - pts
+        df = frame_number - pfno
+        if dt >= 2.0 and df > 0:
+            measured = df / dt
+            est = 0.7 * est + 0.3 * measured if est else measured
+            self._fps_est[stream_id] = (timestamp, frame_number, est)
+        return est or float(self._fps)
 
     def process_batch(self, batch_meta: Any) -> None:
         for frame_meta in batch_meta.frame_items:
@@ -192,6 +210,7 @@ class MetadataProcessor:
                 self._vehicle_type_seen.pop(key, None)
                 self._vehicle_types.pop(key, None)
             self._metrics.record_frame(camera.stream_id, len(tracks), timestamp)
+            fps_cam = self._camera_fps(camera.stream_id, frame_number, timestamp)
             self._bridge.submit_detections(
                 camera.stream_id,
                 {
@@ -207,7 +226,7 @@ class MetadataProcessor:
                             "vehicle_type": self._vehicle_types.get(
                                 (camera.stream_id, track.object_id)
                             ),
-                            "posture": self._posture(camera.stream_id, track, self._fps),
+                            "posture": self._posture(camera.stream_id, track, fps_cam),
                             "box": [
                                 track.bbox[0] / width,
                                 track.bbox[1] / height,
