@@ -342,19 +342,16 @@ class _Occupancy:
             height_px = max(1.0, track.bbox[3] - track.bbox[1])
             width_px = max(1.0, track.bbox[2] - track.bbox[0])
             feet = ((track.bbox[0] + track.bbox[2]) / 2.0, track.bbox[3])
-            if any(_inside(feet, z) for z in self._seat_zones) or (
-                not self._seat_zones and height_px / width_px < 1.25
-            ):
-                sitting += 1
-                continue
+            in_seat = any(_inside(feet, z) for z in self._seat_zones)
             speed_px_s = math.hypot(*track.velocity) * fps
             rel = speed_px_s / height_px
             hist = self._speed_hist.setdefault(track.object_id, deque(maxlen=5))
             hist.append(rel)
-            if sum(hist) / len(hist) > 0.3:
+            if sum(hist) / len(hist) > 0.3 and not in_seat:
                 moving += 1
             else:
-                standing += 1
+                # modelo 3 estados: quieta = sentada (verde) sin distinguir parada
+                sitting += 1
         for object_id in set(self._speed_hist) - active:
             self._speed_hist.pop(object_id, None)
         self._peak = max(self._peak, count)

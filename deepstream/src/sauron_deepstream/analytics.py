@@ -160,18 +160,16 @@ class MetadataProcessor:
             del hist[0]
         avg_rel = sum(hist) / len(hist)
 
-        # sentada por zona de asiento (feet = base de la caja dentro del poligono)
+        # modelo de 3 estados: caido (caja plana), moving (rapida),
+        # sentado (quieta — sentada o parada quieta, verde)
         zones = self._seat_zones.get(stream_id) or []
-        if zones:
-            feet = ((track.bbox[0] + track.bbox[2]) / 2.0, track.bbox[3])
-            if any(_inside(feet, z) for z in zones):
-                first = self._sitting_since.setdefault(key, timestamp)
-                return "sitting" if timestamp - first >= 2.0 else "standing"
-            self._sitting_since.pop(key, None)
-        elif aspect < 1.25 and height_px >= 50:
-            # fallback sin zonas: persona agachada/sentada a media distancia
-            return "sitting"
-        return "moving" if avg_rel > 0.3 else "standing"
+        feet = ((track.bbox[0] + track.bbox[2]) / 2.0, track.bbox[3])
+        in_seat = any(_inside(feet, z) for z in zones)
+        if aspect < 1.0 and height_px >= 50:
+            return "fallen"
+        if avg_rel > 0.3 and not in_seat:
+            return "moving"
+        return "sitting"
 
     def _camera_fps(self, stream_id: str, frame_number: int, timestamp: float) -> float:
         prev = self._fps_est.get(stream_id)
