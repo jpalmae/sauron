@@ -232,8 +232,10 @@ class MetadataProcessor:
                             "id": track.object_id,
                             "class": track.class_name,
                             "confidence": round(track.score, 4),
-                            "vehicle_type": self._vehicle_types.get(
-                                (camera.stream_id, track.object_id)
+                            "vehicle_type": (
+                                self._vehicle_types.get((camera.stream_id, track.object_id))
+                                if track.class_name.lower() not in {"person", "persons"}
+                                else None
                             ),
                             "posture": self._posture(camera.stream_id, track, fps_cam, timestamp),
                             "box": [

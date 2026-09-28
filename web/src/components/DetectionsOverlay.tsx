@@ -177,7 +177,7 @@ export default function DetectionsOverlay({
             ctx.stroke();
           }
         }
-        const detail = o.vehicle_type ?? o.posture;
+        const detail = o.class === "person" ? o.posture : o.vehicle_type;
         const label = `${o.class} #${o.id}${detail ? ` · ${detail}` : ""}`;
         ctx.font = "600 11px ui-monospace, monospace";
         const tw = ctx.measureText(label).width + 8;
