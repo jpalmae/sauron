@@ -1,14 +1,45 @@
 version: 2
+
 updates:
-  - package-ecosystem: "pip"
-    directory: "/api"
+  # pip deps
+  - package-ecosystem: pip
+    directory: /api
     schedule:
-      interval: "daily"
-  - package-ecosystem: "npm"
-    directory: "/web"
+      interval: daily
+    open-pull-requests-limit: 5
+    groups:
+      patch-minor:
+        update-types:
+          - patch
+          - minor
+
+  # npm deps
+  - package-ecosystem: npm
+    directory: /web
     schedule:
-      interval: "daily"
-  - package-ecosystem: "docker"
-    directory: "/"
+      interval: daily
+    open-pull-requests-limit: 5
+    groups:
+      patch-minor:
+        update-types:
+          - patch
+          - minor
+
+  # docker deps
+  - package-ecosystem: docker
+    directory: /
     schedule:
-      interval: "daily"
+      interval: daily
+    open-pull-requests-limit: 5
+    groups:
+      patch-minor:
+        update-types:
+          - patch
+          - minor
+
+  # GitHub Actions
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
