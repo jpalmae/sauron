@@ -18,7 +18,7 @@ jobs:
         working-directory: alpr
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v7
         with:
           python-version: "3.12"
       - run: uv venv && uv pip install -e ".[dev]" --python .venv/bin/python
@@ -32,7 +32,7 @@ jobs:
         working-directory: deepstream
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v7
         with:
           python-version: "3.12"
       - run: uv venv && uv pip install -e ".[dev]" --python .venv/bin/python
@@ -47,7 +47,7 @@ jobs:
         working-directory: api
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v7
         with:
           python-version: "3.11"
       - run: uv venv && uv pip install -e ".[dev]" --python .venv/bin/python
